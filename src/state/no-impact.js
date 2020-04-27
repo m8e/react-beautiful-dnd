@@ -1,18 +1,33 @@
 // @flow
-import type { DragMovement, DragImpact, Position } from '../types';
+import type {
+  DisplacementGroups,
+  DragImpact,
+  DisplacedBy,
+  LiftEffect,
+} from '../types';
+import { origin } from './position';
 
-const origin: Position = { x: 0, y: 0 };
+export const noDisplacedBy: DisplacedBy = {
+  point: origin,
+  value: 0,
+};
 
-export const noMovement: DragMovement = {
-  displaced: [],
-  amount: origin,
-  isBeyondStartPosition: false,
+export const emptyGroups: DisplacementGroups = {
+  invisible: {},
+  visible: {},
+  all: [],
 };
 
 const noImpact: DragImpact = {
-  movement: noMovement,
-  direction: null,
-  destination: null,
+  displaced: emptyGroups,
+  displacedBy: noDisplacedBy,
+  at: null,
 };
 
 export default noImpact;
+
+export const noAfterCritical: LiftEffect = {
+  inVirtualList: false,
+  effected: {},
+  displacedBy: noDisplacedBy,
+};

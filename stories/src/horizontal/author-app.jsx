@@ -1,48 +1,48 @@
 // @flow
 import React, { Component } from 'react';
-import styled from 'styled-components';
-import { action } from '@storybook/addon-actions';
-import { DragDropContext } from '../../../src/';
-import type {
-  DropResult,
-  DragStart,
-} from '../../../src';
+import styled from '@emotion/styled';
+import { colors } from '@atlaskit/theme';
+import { DragDropContext } from '../../../src';
+import type { DropResult } from '../../../src';
 import type { Quote } from '../types';
 import AuthorList from '../primatives/author-list';
 import reorder from '../reorder';
-import { colors, grid } from '../constants';
-
-const publishOnDragStart = action('onDragStart');
-const publishOnDragEnd = action('onDragEnd');
+import { grid } from '../constants';
 
 type Props = {|
   initial: Quote[],
   internalScroll?: boolean,
-|}
+  isCombineEnabled?: boolean,
+|};
 
 type State = {|
   quotes: Quote[],
-|}
+|};
 
 const Root = styled.div`
   padding: ${grid}px;
-  background: ${colors.blue.light};
+  background: ${colors.B50};
 `;
 
 export default class AuthorApp extends Component<Props, State> {
   /* eslint-disable react/sort-comp */
+  static defaultProps = {
+    isCombineEnabled: false,
+  };
 
   state: State = {
     quotes: this.props.initial,
-  }
+  };
   /* eslint-enable react/sort-comp */
 
-  onDragStart = (initial: DragStart) => {
-    publishOnDragStart(initial);
-  }
-
   onDragEnd = (result: DropResult) => {
-    publishOnDragEnd(result);
+    // super simple, just removing the dragging item
+    if (result.combine) {
+      const quotes: Quote[] = [...this.state.quotes];
+      quotes.splice(result.source.index, 1);
+      this.setState({ quotes });
+      return;
+    }
 
     // dropped outside the list
     if (!result.destination) {
@@ -56,24 +56,22 @@ export default class AuthorApp extends Component<Props, State> {
     const quotes = reorder(
       this.state.quotes,
       result.source.index,
-      result.destination.index
+      result.destination.index,
     );
 
     this.setState({
       quotes,
     });
-  }
+  };
 
   render() {
     return (
-      <DragDropContext
-        onDragStart={this.onDragStart}
-        onDragEnd={this.onDragEnd}
-      >
+      <DragDropContext onDragEnd={this.onDragEnd}>
         <Root>
           <AuthorList
             listId="AUTHOR"
             internalScroll={this.props.internalScroll}
+            isCombineEnabled={this.props.isCombineEnabled}
             quotes={this.state.quotes}
           />
         </Root>

@@ -9,15 +9,24 @@ node_modules/
 .DS_Store
 
 # generated files
-lib/
 dist/
-esm/
 
 # generated site
 site/
 
 # coverage reports
 coverage/
+
+# test reports
+test-reports/
+
+# test outputs
+cypress/videos/
+cypress/screenshots/
+
+# storybook
+.storybook.out
+.cache/
 
 # logs
 yarn-error.log

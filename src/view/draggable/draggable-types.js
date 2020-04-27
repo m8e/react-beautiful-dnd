@@ -1,100 +1,94 @@
 // @flow
-import type { Node } from 'react';
+import { type Position } from 'css-box-model';
+import { type Node } from 'react';
 import type {
   DraggableId,
   DroppableId,
   DraggableDimension,
-  Position,
-  Direction,
-  ZIndex,
+  State,
+  MovementMode,
+  ContextId,
+  ElementId,
+  DraggableRubric,
 } from '../../types';
-import {
-  lift,
-  move,
-  moveByWindowScroll,
-  moveForward,
-  moveBackward,
-  crossAxisMoveForward,
-  crossAxisMoveBackward,
-  drop,
-  cancel,
-  dropAnimationFinished,
-} from '../../state/action-creators';
-import type {
-  DragHandleProps,
-} from '../drag-handle/drag-handle-types';
+import { dropAnimationFinished } from '../../state/action-creators';
 
 export type DraggingStyle = {|
-
-  // `position: fixed` is used to ensure that the element is always positioned
-  // in the correct position and ignores the surrounding position:relative parents
   position: 'fixed',
-
-  // When we do `position: fixed` the element looses its normal dimensions,
-  // especially if using flexbox. We set the width and height manually to
-  // ensure the element has the same dimensions as before it started dragging
-  width: number,
-  height: number,
-
-  // The width and height values take into account whether the original element
-  // used `box-sizing: content-box` or `box-sizing: border-box`
-  // Because we are setting the width and height directly we want to ensure that
-  // these are the actual values applied
-  boxSizing: 'border-box',
-
-  // We initially position the element in the same *visual spot* as when it started.
-  // This means that these values *exclude* the original margins so that element remains
-  // in the same visual position - even though now it has no margins
   top: number,
   left: number,
-
-  // We clear any top or left margins on the element to ensure it does not push
-  // the element positioned with the top/left position (which is margin aware).
-  // We also clear the margin right / bottom. This has no positioning impact,
-  // but it is cleanest to just remove all the margins rather than only the top and left.
-  margin: 0,
-
-  // We need to opt out of the shared global style that is being applied to
-  // all draggables. The movement of moving draggables is either not animated
-  // or handled by react-motion.
-  transition: 'none',
-
-  // Move the element in response to a user dragging
+  boxSizing: 'border-box',
+  width: number,
+  height: number,
+  transition: string,
   transform: ?string,
+  zIndex: number,
 
-  // When dragging or dropping we control the z-index to ensure that
-  // the layering is correct
-  zIndex: ZIndex,
+  // for combining
+  opacity: ?number,
 
   // Avoiding any processing of mouse events.
-  // This is already applied by the shared styles. However, doing it here also prevents
-  // the pointer-events during a drop. The actual drag start blocking is taken care of
-  // by canStartDrag() on the context. But this a little safeguard.
+  // This is already applied by the shared styles during a drag.
+  // During a drop it prevents a draggable from being dragged.
+  // canStartDrag() will prevent drags in some cases for non primary draggable.
   // It is also a minor performance optimisation
   pointerEvents: 'none',
-|}
+|};
 
 export type NotDraggingStyle = {|
   transform: ?string,
   // null: use the global animation style
   // none: skip animation (used in certain displacement situations)
   transition: null | 'none',
-|}
+|};
 
 export type DraggableStyle = DraggingStyle | NotDraggingStyle;
 
 export type ZIndexOptions = {|
   dragging: number,
   dropAnimating: number,
-|}
+|};
 
 // Props that can be spread onto the element directly
 export type DraggableProps = {|
   // inline style
   style: ?DraggableStyle,
   // used for shared global styles
-  'data-react-beautiful-dnd-draggable': string,
-|}
+  'data-rbd-draggable-context-id': ContextId,
+  // used for lookups
+  'data-rbd-draggable-id': DraggableId,
+  // used to know when a transition ends
+  onTransitionEnd: ?(event: TransitionEvent) => void,
+|};
+
+export type DragHandleProps = {|
+  // what draggable the handle belongs to
+  'data-rbd-drag-handle-draggable-id': DraggableId,
+
+  // What DragDropContext the drag handle is in
+  'data-rbd-drag-handle-context-id': ContextId,
+
+  // We need a drag handle to be a widget in order to correctly set accessibility properties
+  // Note: JAWS and VoiceOver don't need the element to be a 'widget' to read the accessibility properties, but NVDA does
+  // Using `role="button"` but leaving the public API as a string to allow for changing without a major
+  role: string,
+
+  // Overriding default role to have a more descriptive text ("Draggable item")
+  // Sadly we cannot use this right now due an issue with lighthouse
+  // https://github.com/atlassian/react-beautiful-dnd/issues/1742
+  // 'aria-roledescription': string,
+
+  // Using the description property of the drag handle to provide usage instructions
+  'aria-describedby': ElementId,
+
+  // Allow tabbing to this element
+  // Adding a tab index marks the element as interactive content: https://www.w3.org/TR/html51/dom.html#kinds-of-content-interactive-content
+  tabIndex: number,
+
+  // Opting out of html5 drag and drop
+  draggable: boolean,
+  onDragStart: (event: DragEvent) => void,
+|};
 
 export type Provided = {|
   draggableProps: DraggableProps,
@@ -102,62 +96,96 @@ export type Provided = {|
   dragHandleProps: ?DragHandleProps,
   // The following props will be removed once we move to react 16
   innerRef: (?HTMLElement) => void,
-  placeholder: ?Node,
-|}
+|};
+
+// to easily enable patching of styles
+export type DropAnimation = {|
+  duration: number,
+  curve: string,
+  moveTo: Position,
+  opacity: ?number,
+  scale: ?number,
+|};
 
 export type StateSnapshot = {|
   isDragging: boolean,
+  isDropAnimating: boolean,
+  isClone: boolean,
+  dropAnimation: ?DropAnimation,
   draggingOver: ?DroppableId,
-|}
+  combineWith: ?DraggableId,
+  combineTargetFor: ?DraggableId,
+  mode: ?MovementMode,
+|};
 
 export type DispatchProps = {|
-  lift: typeof lift,
-  move: typeof move,
-  moveByWindowScroll: typeof moveByWindowScroll,
-  moveForward: typeof moveForward,
-  moveBackward: typeof moveBackward,
-  crossAxisMoveForward: typeof crossAxisMoveForward,
-  crossAxisMoveBackward: typeof crossAxisMoveBackward,
-  drop: typeof drop,
-  cancel: typeof cancel,
   dropAnimationFinished: typeof dropAnimationFinished,
-|}
+|};
+
+export type DraggingMapProps = {|
+  type: 'DRAGGING',
+  offset: Position,
+  mode: MovementMode,
+  dropping: ?DropAnimation,
+  draggingOver: ?DraggableId,
+  combineWith: ?DraggableId,
+  dimension: DraggableDimension,
+  forceShouldAnimate: ?boolean,
+  snapshot: StateSnapshot,
+|};
+
+export type SecondaryMapProps = {|
+  type: 'SECONDARY',
+  offset: Position,
+  combineTargetFor: ?DraggableId,
+  shouldAnimateDisplacement: boolean,
+  snapshot: StateSnapshot,
+|};
+
+export type MappedProps = DraggingMapProps | SecondaryMapProps;
 
 export type MapProps = {|
-  isDragging: boolean,
-  // whether or not a drag movement should be animated
-  // used for dropping and keyboard dragging
-  shouldAnimateDragMovement: boolean,
   // when an item is being displaced by a dragging item,
   // we need to know if that movement should be animated
-  shouldAnimateDisplacement: boolean,
-  isDropAnimating: boolean,
-  offset: Position,
-  // only provided when dragging
-  // can be null if not over a droppable
-  direction: ?Direction,
-  dimension: ?DraggableDimension,
-  draggingOver: ?DroppableId,
-|}
+  mapped: MappedProps,
+  // dragging: ?DraggingMapProps,
+  // secondary: ?SecondaryMapProps,
+|};
+
+export type ChildrenFn = (
+  Provided,
+  StateSnapshot,
+  DraggableRubric,
+) => Node | null;
+
+export type PublicOwnProps = {|
+  draggableId: DraggableId,
+  index: number,
+  children: ChildrenFn,
+
+  // optional own props
+  isDragDisabled?: boolean,
+  disableInteractiveElementBlocking?: boolean,
+  shouldRespectForcePress?: boolean,
+|};
+
+export type PrivateOwnProps = {|
+  ...PublicOwnProps,
+  isClone: boolean,
+  // no longer optional
+  isEnabled: boolean,
+  canDragInteractiveElements: boolean,
+  shouldRespectForcePress: boolean,
+|};
 
 export type OwnProps = {|
-  draggableId: DraggableId,
-  children: (Provided, StateSnapshot) => ?Node,
-  index: number,
-  isDragDisabled: boolean,
-  disableInteractiveElementBlocking: boolean,
-|}
-
-export type DefaultProps = {|
-  isDragDisabled: boolean,
-  disableInteractiveElementBlocking: boolean
-|}
+  ...PrivateOwnProps,
+|};
 
 export type Props = {|
   ...MapProps,
   ...DispatchProps,
-  ...OwnProps
-|}
+  ...OwnProps,
+|};
 
-// Having issues getting the correct reselect type
-export type Selector = Function;
+export type Selector = (state: State, ownProps: OwnProps) => MapProps;

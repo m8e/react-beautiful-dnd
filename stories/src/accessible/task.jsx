@@ -1,28 +1,42 @@
 // @flow
-import React, { Component } from 'react';
-import styled from 'styled-components';
-import { Draggable } from '../../../src/';
-import type { DraggableProvided, DraggableStateSnapshot } from '../../../src/';
+import React, { Component, type Node } from 'react';
+import ReactDOM from 'react-dom';
+import memoizeOne from 'memoize-one';
+import styled from '@emotion/styled';
+import { colors } from '@atlaskit/theme';
+import { invariant } from '../../../src/invariant';
+import { Draggable } from '../../../src';
+import type { DraggableProvided, DraggableStateSnapshot } from '../../../src';
 import type { Task as TaskType } from '../types';
-import { colors, grid, borderRadius } from '../constants';
+import { grid, borderRadius } from '../constants';
+import BlurContext from './blur-context';
 
 type Props = {|
   task: TaskType,
   index: number,
-|}
+|};
 
 const Container = styled.div`
   border-bottom: 1px solid #ccc;
-  background: ${colors.white};
+  background: ${colors.N0};
   padding: ${grid}px;
   margin-bottom: ${grid}px;
   border-radius: ${borderRadius}px;
   font-size: 18px;
-
-  ${({ isDragging }) => (isDragging ? 'box-shadow: 1px 1px 1px grey; background: lightblue' : '')}
+  filter: blur(${(props) => props.blur}px);
+  ${({ isDragging }) =>
+    isDragging ? 'box-shadow: 1px 1px 1px grey; background: lightblue' : ''};
 `;
 
-const Wrapper = styled.div``;
+const getPortal = memoizeOne((): HTMLElement => {
+  invariant(document);
+  const body: ?HTMLBodyElement = document.body;
+  invariant(body);
+  const el: HTMLElement = document.createElement('div');
+  el.className = 'rbd-portal';
+  body.appendChild(el);
+  return el;
+});
 
 export default class Task extends Component<Props> {
   render() {
@@ -30,22 +44,34 @@ export default class Task extends Component<Props> {
     const index: number = this.props.index;
 
     return (
-      <Draggable draggableId={task.id} index={index}>
-        {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
-          <Wrapper>
-            <Container
-              innerRef={provided.innerRef}
-              isDragging={snapshot.isDragging}
-              {...provided.draggableProps}
-              {...provided.dragHandleProps}
-              aria-roledescription="Draggable task. Press space bar to lift"
-            >
-              {this.props.task.content}
-            </Container>
-            {provided.placeholder}
-          </Wrapper>
+      <BlurContext.Consumer>
+        {(blur: number) => (
+          <Draggable draggableId={task.id} index={index}>
+            {(
+              provided: DraggableProvided,
+              snapshot: DraggableStateSnapshot,
+            ) => {
+              const child: Node = (
+                <Container
+                  ref={provided.innerRef}
+                  isDragging={snapshot.isDragging}
+                  {...provided.draggableProps}
+                  {...provided.dragHandleProps}
+                  blur={blur}
+                >
+                  {this.props.task.content}
+                </Container>
+              );
+
+              if (!snapshot.isDragging) {
+                return child;
+              }
+
+              return ReactDOM.createPortal(child, getPortal());
+            }}
+          </Draggable>
         )}
-      </Draggable>
+      </BlurContext.Consumer>
     );
   }
 }

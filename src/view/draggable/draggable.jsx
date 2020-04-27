@@ -1,363 +1,171 @@
 // @flow
-import React, { Component } from 'react';
-import PropTypes from 'prop-types';
-import memoizeOne from 'memoize-one';
-import invariant from 'invariant';
-import type {
-  Position,
-  DraggableDimension,
-  InitialDragPositions,
-  DroppableId,
-  AutoScrollMode,
-} from '../../types';
-import DraggableDimensionPublisher from '../draggable-dimension-publisher/';
-import Moveable from '../moveable/';
-import DragHandle from '../drag-handle';
-import getViewport from '../window/get-viewport';
-// eslint-disable-next-line no-duplicate-imports
-import type {
-  DragHandleProps,
-  Callbacks as DragHandleCallbacks,
-} from '../drag-handle/drag-handle-types';
-import getCenterPosition from '../get-center-position';
-import Placeholder from '../placeholder';
-import { droppableIdKey, styleContextKey } from '../context-keys';
-import * as timings from '../../debug/timings';
+import { useRef } from 'react';
+import { useMemo, useCallback } from 'use-memo-one';
+import type { DraggableRubric, DraggableDescriptor } from '../../types';
+import getStyle from './get-style';
+import useDraggablePublisher, {
+  type Args as PublisherArgs,
+} from '../use-draggable-publisher/use-draggable-publisher';
+import AppContext from '../context/app-context';
+import DroppableContext from '../context/droppable-context';
 import type {
   Props,
   Provided,
-  StateSnapshot,
-  DefaultProps,
-  DraggingStyle,
-  NotDraggingStyle,
   DraggableStyle,
-  ZIndexOptions,
+  DragHandleProps,
 } from './draggable-types';
-import type { Speed, Style as MovementStyle } from '../moveable/moveable-types';
+import { useValidation, useClonePropValidation } from './use-validation';
+import useRequiredContext from '../use-required-context';
 
-type State = {|
-  ref: ?HTMLElement,
-|}
+function preventHtml5Dnd(event: DragEvent) {
+  event.preventDefault();
+}
 
-export const zIndexOptions: ZIndexOptions = {
-  dragging: 5000,
-  dropAnimating: 4500,
-};
+export default function Draggable(props: Props) {
+  // reference to DOM node
+  const ref = useRef<?HTMLElement>(null);
+  const setRef = useCallback((el: ?HTMLElement) => {
+    ref.current = el;
+  }, []);
+  const getRef = useCallback((): ?HTMLElement => ref.current, []);
 
-export default class Draggable extends Component<Props, State> {
-  /* eslint-disable react/sort-comp */
-  callbacks: DragHandleCallbacks
-  styleContext: string
+  // context
+  const {
+    contextId,
+    dragHandleUsageInstructionsId,
+    registry,
+  } = useRequiredContext(AppContext);
+  const { type, droppableId } = useRequiredContext(DroppableContext);
 
-  state: State = {
-    ref: null,
-  }
+  const descriptor: DraggableDescriptor = useMemo(
+    () => ({
+      id: props.draggableId,
+      index: props.index,
+      type,
+      droppableId,
+    }),
+    [props.draggableId, props.index, type, droppableId],
+  );
 
-  // Need to declare contextTypes without flow
-  // https://github.com/brigand/babel-plugin-flow-react-proptypes/issues/22
-  static contextTypes = {
-    [droppableIdKey]: PropTypes.string.isRequired,
-    [styleContextKey]: PropTypes.string.isRequired,
-  }
+  // props
+  const {
+    // ownProps
+    children,
+    draggableId,
+    isEnabled,
+    shouldRespectForcePress,
+    canDragInteractiveElements,
+    isClone,
 
-  constructor(props: Props, context: Object) {
-    super(props, context);
+    // mapProps
+    mapped,
 
-    const callbacks: DragHandleCallbacks = {
-      onLift: this.onLift,
-      onMove: this.onMove,
-      onDrop: this.onDrop,
-      onCancel: this.onCancel,
-      onMoveBackward: this.onMoveBackward,
-      onMoveForward: this.onMoveForward,
-      onCrossAxisMoveForward: this.onCrossAxisMoveForward,
-      onCrossAxisMoveBackward: this.onCrossAxisMoveBackward,
-      onWindowScroll: this.onWindowScroll,
-    };
+    // dispatchProps
+    dropAnimationFinished: dropAnimationFinishedAction,
+  } = props;
 
-    this.callbacks = callbacks;
-    this.styleContext = context[styleContextKey];
-  }
+  // Validating props and innerRef
+  useValidation(props, contextId, getRef);
 
-  // This should already be handled gracefully in DragHandle.
-  // Just being extra clear here
-  throwIfCannotDrag() {
-    invariant(this.state.ref,
-      'Draggable: cannot drag as no DOM node has been provided'
+  // Clones do not speak to the dimension marshal
+  // We are violating the rules of hooks here: conditional hooks.
+  // In this specific use case it is okay as an item will always either be a
+  // clone or not for it's whole lifecycle
+  /* eslint-disable react-hooks/rules-of-hooks */
+
+  // Being super sure that isClone is not changing during a draggable lifecycle
+  useClonePropValidation(isClone);
+  if (!isClone) {
+    const forPublisher: PublisherArgs = useMemo(
+      () => ({
+        descriptor,
+        registry,
+        getDraggableRef: getRef,
+        canDragInteractiveElements,
+        shouldRespectForcePress,
+        isEnabled,
+      }),
+      [
+        descriptor,
+        registry,
+        getRef,
+        canDragInteractiveElements,
+        shouldRespectForcePress,
+        isEnabled,
+      ],
     );
-    invariant(!this.props.isDragDisabled,
-      'Draggable: cannot drag as dragging is not enabled'
-    );
+    useDraggablePublisher(forPublisher);
   }
+  /* eslint-enable react-hooks/rules-of-hooks */
 
-  onMoveEnd = () => {
-    if (!this.props.isDropAnimating) {
-      return;
-    }
+  const dragHandleProps: ?DragHandleProps = useMemo(
+    () =>
+      isEnabled
+        ? {
+            // See `draggable-types` for an explanation of why these are used
+            tabIndex: 0,
+            role: 'button',
+            'aria-describedby': dragHandleUsageInstructionsId,
+            'data-rbd-drag-handle-draggable-id': draggableId,
+            'data-rbd-drag-handle-context-id': contextId,
+            draggable: false,
+            onDragStart: preventHtml5Dnd,
+          }
+        : null,
+    [contextId, dragHandleUsageInstructionsId, draggableId, isEnabled],
+  );
 
-    this.props.dropAnimationFinished();
-  }
-
-  onLift = (options: {client: Position, autoScrollMode: AutoScrollMode}) => {
-    timings.start('LIFT');
-    this.throwIfCannotDrag();
-    const { client, autoScrollMode } = options;
-    const { lift, draggableId } = this.props;
-    const { ref } = this.state;
-
-    if (!ref) {
-      throw new Error('cannot lift at this time');
-    }
-
-    const initial: InitialDragPositions = {
-      selection: client,
-      center: getCenterPosition(ref),
-    };
-
-    lift(draggableId, initial, getViewport(), autoScrollMode);
-  }
-
-  onMove = (client: Position) => {
-    this.throwIfCannotDrag();
-
-    const { draggableId, dimension, move } = this.props;
-
-    // dimensions not provided yet
-    if (!dimension) {
-      return;
-    }
-
-    move(draggableId, client, getViewport());
-  }
-
-  onMoveForward = () => {
-    this.throwIfCannotDrag();
-    this.props.moveForward(this.props.draggableId);
-  }
-
-  onMoveBackward = () => {
-    this.throwIfCannotDrag();
-    this.props.moveBackward(this.props.draggableId);
-  }
-
-  onCrossAxisMoveForward = () => {
-    this.throwIfCannotDrag();
-    this.props.crossAxisMoveForward(this.props.draggableId);
-  }
-
-  onCrossAxisMoveBackward = () => {
-    this.throwIfCannotDrag();
-    this.props.crossAxisMoveBackward(this.props.draggableId);
-  }
-
-  onWindowScroll = () => {
-    this.throwIfCannotDrag();
-    this.props.moveByWindowScroll(this.props.draggableId, getViewport());
-  }
-
-  onDrop = () => {
-    this.throwIfCannotDrag();
-    this.props.drop();
-  }
-
-  onCancel = () => {
-    // Not checking if drag is enabled.
-    // Cancel is an escape mechanism
-    this.props.cancel();
-  }
-
-  // React calls ref callback twice for every render
-  // https://github.com/facebook/react/pull/8333/files
-  setRef = ((ref: ?HTMLElement) => {
-    // TODO: need to clear this.state.ref on unmount
-    if (ref === null) {
-      return;
-    }
-
-    if (ref === this.state.ref) {
-      return;
-    }
-
-    // need to trigger a child render when ref changes
-    this.setState({
-      ref,
-    });
-  })
-
-  getDraggableRef = (): ?HTMLElement => this.state.ref;
-
-  getPlaceholder() {
-    const dimension: ?DraggableDimension = this.props.dimension;
-    invariant(dimension, 'cannot get a drag placeholder when not dragging');
-
-    return (
-      <Placeholder placeholder={dimension.placeholder} />
-    );
-  }
-
-  getDraggingStyle = memoizeOne(
-    (dimension: DraggableDimension,
-      isDropAnimating: boolean,
-      movementStyle: MovementStyle): DraggingStyle => {
-      const { width, height, top, left } = dimension.client.paddingBox;
-      // For an explanation of properties see `draggable-types`.
-      const style: DraggingStyle = {
-        position: 'fixed',
-        boxSizing: 'border-box',
-        zIndex: isDropAnimating ? zIndexOptions.dropAnimating : zIndexOptions.dragging,
-        width,
-        height,
-        top,
-        left,
-        margin: 0,
-        pointerEvents: 'none',
-        transition: 'none',
-        transform: movementStyle.transform ? `${movementStyle.transform}` : null,
-      };
-      return style;
-    }
-  )
-
-  getNotDraggingStyle = memoizeOne(
-    (movementStyle: MovementStyle, shouldAnimateDisplacement: boolean): NotDraggingStyle => {
-      const style: NotDraggingStyle = {
-        transform: movementStyle.transform,
-        // use the global animation for animation - or opt out of it
-        transition: shouldAnimateDisplacement ? null : 'none',
-        // transition: css.outOfTheWay,
-      };
-      return style;
-    }
-  )
-
-  getProvided = memoizeOne(
-    (
-      isDragging: boolean,
-      isDropAnimating: boolean,
-      shouldAnimateDisplacement: boolean,
-      dimension: ?DraggableDimension,
-      dragHandleProps: ?DragHandleProps,
-      movementStyle: MovementStyle,
-    ): Provided => {
-      const useDraggingStyle: boolean = isDragging || isDropAnimating;
-
-      const draggableStyle: DraggableStyle = (() => {
-        if (!useDraggingStyle) {
-          return this.getNotDraggingStyle(movementStyle, shouldAnimateDisplacement);
-        }
-
-        invariant(dimension, 'draggable dimension required for dragging');
-
-        // Need to position element in original visual position. To do this
-        // we position it without
-        return this.getDraggingStyle(dimension, isDropAnimating, movementStyle);
-      })();
-
-      const provided: Provided = {
-        innerRef: this.setRef,
-        draggableProps: {
-          'data-react-beautiful-dnd-draggable': this.styleContext,
-          style: draggableStyle,
-        },
-        dragHandleProps,
-        placeholder: useDraggingStyle ? this.getPlaceholder() : null,
-      };
-      return provided;
-    }
-  )
-
-  getSnapshot = memoizeOne((
-    isDragging: boolean,
-    isDropAnimating: boolean,
-    draggingOver: ?DroppableId,
-  ): StateSnapshot => ({
-    isDragging: (isDragging || isDropAnimating),
-    draggingOver,
-  }))
-
-  getSpeed = memoizeOne(
-    (isDragging: boolean, shouldAnimateDragMovement: boolean, isDropAnimating: boolean): Speed => {
-      if (isDropAnimating) {
-        return 'STANDARD';
+  const onMoveEnd = useCallback(
+    (event: TransitionEvent) => {
+      if (mapped.type !== 'DRAGGING') {
+        return;
       }
 
-      // if dragging and can animate - then move quickly
-      if (isDragging && shouldAnimateDragMovement) {
-        return 'FAST';
+      if (!mapped.dropping) {
+        return;
       }
 
-      // Animation taken care of by css
-      return 'INSTANT';
-    })
+      // There might be other properties on the element that are
+      // being transitioned. We do not want those to end a drop animation!
+      if (event.propertyName !== 'transform') {
+        return;
+      }
 
-  render() {
-    const {
-      draggableId,
-      index,
-      offset,
-      isDragging,
-      isDropAnimating,
-      isDragDisabled,
-      dimension,
-      draggingOver,
-      direction,
-      shouldAnimateDragMovement,
-      shouldAnimateDisplacement,
-      disableInteractiveElementBlocking,
-      children,
-    } = this.props;
-    const droppableId: DroppableId = this.context[droppableIdKey];
+      dropAnimationFinishedAction();
+    },
+    [dropAnimationFinishedAction, mapped],
+  );
 
-    const speed = this.getSpeed(
-      isDragging,
-      shouldAnimateDragMovement,
-      isDropAnimating
-    );
+  const provided: Provided = useMemo(() => {
+    const style: DraggableStyle = getStyle(mapped);
+    const onTransitionEnd =
+      mapped.type === 'DRAGGING' && mapped.dropping ? onMoveEnd : null;
 
-    return (
-      <DraggableDimensionPublisher
-        draggableId={draggableId}
-        droppableId={droppableId}
-        index={index}
-        targetRef={this.state.ref}
-      >
-        <Moveable
-          speed={speed}
-          destination={offset}
-          onMoveEnd={this.onMoveEnd}
-        >
-          {(movementStyle: MovementStyle) => (
-            <DragHandle
-              draggableId={draggableId}
-              isDragging={isDragging}
-              direction={direction}
-              isEnabled={!isDragDisabled}
-              callbacks={this.callbacks}
-              getDraggableRef={this.getDraggableRef}
-              // by default we do not allow dragging on interactive elements
-              canDragInteractiveElements={disableInteractiveElementBlocking}
-            >
-              {(dragHandleProps: ?DragHandleProps) =>
-                children(
-                  this.getProvided(
-                    isDragging,
-                    isDropAnimating,
-                    shouldAnimateDisplacement,
-                    dimension,
-                    dragHandleProps,
-                    movementStyle,
-                  ),
-                  this.getSnapshot(
-                    isDragging,
-                    isDropAnimating,
-                    draggingOver,
-                  )
-                )
-              }
-            </DragHandle>
-          )}
-        </Moveable>
-      </DraggableDimensionPublisher>
-    );
-  }
+    const result: Provided = {
+      innerRef: setRef,
+      draggableProps: {
+        'data-rbd-draggable-context-id': contextId,
+        'data-rbd-draggable-id': draggableId,
+        style,
+        onTransitionEnd,
+      },
+      dragHandleProps,
+    };
+
+    return result;
+  }, [contextId, dragHandleProps, draggableId, mapped, onMoveEnd, setRef]);
+
+  const rubric: DraggableRubric = useMemo(
+    () => ({
+      draggableId: descriptor.id,
+      type: descriptor.type,
+      source: {
+        index: descriptor.index,
+        droppableId: descriptor.droppableId,
+      },
+    }),
+    [descriptor.droppableId, descriptor.id, descriptor.index, descriptor.type],
+  );
+
+  return children(provided, mapped.snapshot, rubric);
 }

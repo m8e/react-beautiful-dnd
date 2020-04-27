@@ -1,9 +1,10 @@
 // @flow
 import React, { Component } from 'react';
-import styled from 'styled-components';
-import { Draggable } from '../../../src/';
-import { grid, colors, borderRadius } from '../constants';
-import type { DraggableProvided, DraggableStateSnapshot } from '../../../src/';
+import styled from '@emotion/styled';
+import { colors } from '@atlaskit/theme';
+import { Draggable } from '../../../src';
+import { grid, borderRadius } from '../constants';
+import type { DraggableProvided, DraggableStateSnapshot } from '../../../src';
 import type { Id, Task as TaskType } from '../types';
 
 // https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/button
@@ -18,53 +19,54 @@ type Props = {|
   toggleSelection: (taskId: Id) => void,
   toggleSelectionInGroup: (taskId: Id) => void,
   multiSelectTo: (taskId: Id) => void,
-|}
+|};
 
-type GetBackgroundColorArgs= {|
+type GetBackgroundColorArgs = {|
   isSelected: boolean,
   isDragging: boolean,
   isGhosting: boolean,
-|}
+|};
 
 const getBackgroundColor = ({
   isSelected,
   isGhosting,
 }: GetBackgroundColorArgs): string => {
   if (isGhosting) {
-    return colors.grey.light;
+    return colors.N10;
   }
 
   if (isSelected) {
-    return colors.blue.light;
+    return colors.B50;
   }
 
-  return colors.grey.light;
+  return colors.N10;
 };
 
-const getColor = ({
-  isSelected,
-  isGhosting,
-}): string => {
+const getColor = ({ isSelected, isGhosting }): string => {
   if (isGhosting) {
     return 'darkgrey';
   }
   if (isSelected) {
-    return colors.blue.deep;
+    return colors.B200;
   }
-  return colors.black;
+  return colors.N900;
 };
 
 const Container = styled.div`
-  background-color: ${props => getBackgroundColor(props)};
-  color: ${props => getColor(props)};
+  background-color: ${(props) => getBackgroundColor(props)};
+  color: ${(props) => getColor(props)};
   padding: ${grid}px;
   margin-bottom: ${grid}px;
-  border-radius: ${borderRadius}px;4
+  border-radius: ${borderRadius}px;
   font-size: 18px;
-  border: 1px solid ${colors.shadow};
-
-  ${props => (props.isDragging ? `box-shadow: 2px 2px 1px ${colors.shadow};` : '')}
-  ${props => (props.isGhosting ? 'opacity: 0.8;' : '')}
+  border: 3px solid ${colors.N90};
+  ${(props) =>
+    props.isDragging ? `box-shadow: 2px 2px 1px ${colors.N90};` : ''} ${(
+    props,
+  ) =>
+    props.isGhosting
+      ? 'opacity: 0.8;'
+      : ''}
 
   /* needed for SelectionCount */
   position: relative;
@@ -72,20 +74,19 @@ const Container = styled.div`
   /* avoid default outline which looks lame with the position: absolute; */
   &:focus {
     outline: none;
-    border-color: ${colors.blue.deep};
+    border-color: ${colors.G200};
   }
 `;
-
-const Content = styled.div`
-`;
-
+/* stylelint-disable block-no-empty */
+const Content = styled.div``;
+/* stylelint-enable */
 const size: number = 30;
 
 const SelectionCount = styled.div`
   right: -${grid}px;
   top: -${grid}px;
-  color: ${colors.white};
-  background: ${colors.blue.deep};
+  color: ${colors.N0};
+  background: ${colors.N200};
   border-radius: 50%;
   height: ${size}px;
   width: ${size}px;
@@ -107,12 +108,8 @@ export default class Task extends Component<Props> {
   onKeyDown = (
     event: KeyboardEvent,
     provided: DraggableProvided,
-    snapshot: DraggableStateSnapshot
+    snapshot: DraggableStateSnapshot,
   ) => {
-    if (provided.dragHandleProps) {
-      provided.dragHandleProps.onKeyDown(event);
-    }
-
     if (event.defaultPrevented) {
       return;
     }
@@ -128,11 +125,8 @@ export default class Task extends Component<Props> {
     // we are using the event for selection
     event.preventDefault();
 
-    const wasMetaKeyUsed: boolean = event.metaKey;
-    const wasShiftKeyUsed: boolean = event.shiftKey;
-
-    this.performAction(wasMetaKeyUsed, wasShiftKeyUsed);
-  }
+    this.performAction(event);
+  };
 
   // Using onClick as it will be correctly
   // preventing if there was a drag
@@ -148,10 +142,7 @@ export default class Task extends Component<Props> {
     // marking the event as used
     event.preventDefault();
 
-    const wasMetaKeyUsed: boolean = event.metaKey;
-    const wasShiftKeyUsed: boolean = event.shiftKey;
-
-    this.performAction(wasMetaKeyUsed, wasShiftKeyUsed);
+    this.performAction(event);
   };
 
   onTouchEnd = (event: TouchEvent) => {
@@ -164,9 +155,18 @@ export default class Task extends Component<Props> {
     // if this element was an anchor
     event.preventDefault();
     this.props.toggleSelectionInGroup(this.props.task.id);
-  }
+  };
 
-  performAction = (wasMetaKeyUsed: boolean, wasShiftKeyUsed: boolean) => {
+  // Determines if the platform specific toggle selection in group key was used
+  wasToggleInSelectionGroupKeyUsed = (event: MouseEvent | KeyboardEvent) => {
+    const isUsingWindows = navigator.platform.indexOf('Win') >= 0;
+    return isUsingWindows ? event.ctrlKey : event.metaKey;
+  };
+
+  // Determines if the multiSelect key was used
+  wasMultiSelectKeyUsed = (event: MouseEvent | KeyboardEvent) => event.shiftKey;
+
+  performAction = (event: MouseEvent | KeyboardEvent) => {
     const {
       task,
       toggleSelection,
@@ -174,18 +174,18 @@ export default class Task extends Component<Props> {
       multiSelectTo,
     } = this.props;
 
-    if (wasMetaKeyUsed) {
+    if (this.wasToggleInSelectionGroupKeyUsed(event)) {
       toggleSelectionInGroup(task.id);
       return;
     }
 
-    if (wasShiftKeyUsed) {
+    if (this.wasMultiSelectKeyUsed(event)) {
       multiSelectTo(task.id);
       return;
     }
 
     toggleSelection(task.id);
-  }
+  };
 
   render() {
     const task: TaskType = this.props.task;
@@ -196,26 +196,28 @@ export default class Task extends Component<Props> {
     return (
       <Draggable draggableId={task.id} index={index}>
         {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => {
-          const shouldShowSelection: boolean = snapshot.isDragging && selectionCount > 1;
+          const shouldShowSelection: boolean =
+            snapshot.isDragging && selectionCount > 1;
 
           return (
-            <div>
-              <Container
-                innerRef={provided.innerRef}
-                {...provided.draggableProps}
-                {...provided.dragHandleProps}
-                onClick={this.onClick}
-                onTouchEnd={this.onTouchEnd}
-                onKeyDown={(event: KeyboardEvent) => this.onKeyDown(event, provided, snapshot)}
-                isDragging={snapshot.isDragging}
-                isSelected={isSelected}
-                isGhosting={isGhosting}
-              >
-                <Content>{task.content}</Content>
-                {shouldShowSelection ? <SelectionCount>{selectionCount}</SelectionCount> : null}
-              </Container>
-              {provided.placeholder}
-            </div>
+            <Container
+              ref={provided.innerRef}
+              {...provided.draggableProps}
+              {...provided.dragHandleProps}
+              onClick={this.onClick}
+              onTouchEnd={this.onTouchEnd}
+              onKeyDown={(event: KeyboardEvent) =>
+                this.onKeyDown(event, provided, snapshot)
+              }
+              isDragging={snapshot.isDragging}
+              isSelected={isSelected}
+              isGhosting={isGhosting}
+            >
+              <Content>{task.content}</Content>
+              {shouldShowSelection ? (
+                <SelectionCount>{selectionCount}</SelectionCount>
+              ) : null}
+            </Container>
           );
         }}
       </Draggable>

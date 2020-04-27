@@ -1,24 +1,21 @@
 // @flow
 import React, { Component } from 'react';
-import styled from 'styled-components';
-import { action } from '@storybook/addon-actions';
-import { DragDropContext } from '../../../src/';
+import styled from '@emotion/styled';
+import { colors } from '@atlaskit/theme';
+import { DragDropContext } from '../../../src';
 import QuoteList from '../primatives/quote-list';
-import { colors, grid } from '../constants';
+import { grid } from '../constants';
 import { reorderQuoteMap } from '../reorder';
 import type { QuoteMap } from '../types';
-import type { DropResult, DragStart } from '../../../src/types';
-
-const publishOnDragStart = action('onDragStart');
-const publishOnDragEnd = action('onDragEnd');
+import type { DropResult } from '../../../src/types';
 
 const Root = styled.div`
-  background: ${colors.blue.deep};
+  background: ${colors.B200};
   display: flex;
 `;
 
 const Column = styled.div`
-  background-color: ${colors.blue.light};
+  background-color: ${colors.B50};
 
   /* make the column a scroll container */
   height: 100vh;
@@ -39,11 +36,11 @@ const Title = styled.h4`
 
 type Props = {|
   initial: QuoteMap,
-|}
+|};
 
 type State = {|
   quoteMap: QuoteMap,
-|}
+|};
 
 export default class QuoteApp extends Component<Props, State> {
   /* eslint-disable react/sort-comp */
@@ -52,13 +49,7 @@ export default class QuoteApp extends Component<Props, State> {
     quoteMap: this.props.initial,
   };
 
-  onDragStart = (initial: DragStart) => {
-    publishOnDragStart(initial);
-  }
-
   onDragEnd = (result: DropResult) => {
-    publishOnDragEnd(result);
-
     if (!result.destination) {
       return;
     }
@@ -70,26 +61,19 @@ export default class QuoteApp extends Component<Props, State> {
     });
 
     this.setState({ quoteMap });
-  }
+  };
 
   render() {
     const { quoteMap } = this.state;
 
     return (
-      <DragDropContext
-        onDragStart={this.onDragStart}
-        onDragEnd={this.onDragEnd}
-      >
+      <DragDropContext onDragEnd={this.onDragEnd}>
         <Root>
           <Column>
             {Object.keys(quoteMap).map((key: string) => (
               <Group key={key}>
                 <Title>{key}</Title>
-                <QuoteList
-                  quotes={quoteMap[key]}
-                  listId={key}
-                  listType={key}
-                />
+                <QuoteList quotes={quoteMap[key]} listId={key} listType={key} />
               </Group>
             ))}
           </Column>

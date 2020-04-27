@@ -3,11 +3,11 @@
 /* eslint-disable flowtype/require-valid-file-annotation */
 
 import React, { Component } from 'react';
-import { DragDropContext, Droppable, Draggable } from '../../../src/';
+import { DragDropContext, Droppable, Draggable } from '../../../src';
 
 // fake data generator
-const getItems = count =>
-  Array.from({ length: count }, (v, k) => k).map(k => ({
+const getItems = (count) =>
+  Array.from({ length: count }, (v, k) => k).map((k) => ({
     id: `item-${k}`,
     content: `item ${k}`,
   }));
@@ -36,7 +36,7 @@ const getItemStyle = (isDragging, draggableStyle) => ({
   ...draggableStyle,
 });
 
-const getListStyle = isDraggingOver => ({
+const getListStyle = (isDraggingOver) => ({
   background: isDraggingOver ? 'lightblue' : 'grey',
   padding: grid,
   width: 250,
@@ -45,6 +45,7 @@ const getListStyle = isDraggingOver => ({
 export default class App extends Component {
   constructor(props, context) {
     super(props, context);
+    // eslint-disable-next-line react/state-in-constructor
     this.state = {
       items: getItems(10),
     };
@@ -60,7 +61,7 @@ export default class App extends Component {
     const items = reorder(
       this.state.items,
       result.source.index,
-      result.destination.index
+      result.destination.index,
     );
 
     this.setState({
@@ -82,19 +83,16 @@ export default class App extends Component {
               {this.state.items.map((item, index) => (
                 <Draggable key={item.id} draggableId={item.id} index={index}>
                   {(draggableProvided, draggableSnapshot) => (
-                    <div>
-                      <div
-                        ref={draggableProvided.innerRef}
-                        {...draggableProvided.draggableProps}
-                        {...draggableProvided.dragHandleProps}
-                        style={getItemStyle(
-                          draggableSnapshot.isDragging,
-                          draggableProvided.draggableProps.style
-                        )}
-                      >
-                        {item.content}
-                      </div>
-                      {draggableProvided.placeholder}
+                    <div
+                      ref={draggableProvided.innerRef}
+                      {...draggableProvided.draggableProps}
+                      {...draggableProvided.dragHandleProps}
+                      style={getItemStyle(
+                        draggableSnapshot.isDragging,
+                        draggableProvided.draggableProps.style,
+                      )}
+                    >
+                      {item.content}
                     </div>
                   )}
                 </Draggable>

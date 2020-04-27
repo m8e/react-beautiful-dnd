@@ -1,6 +1,7 @@
 // @flow
 import type { Column, ColumnMap, Entities } from './types';
 import type { Id } from '../types';
+import { invariant } from '../../../src/invariant';
 import type { DraggableLocation } from '../../../src/types';
 import reorder from '../reorder';
 
@@ -9,13 +10,13 @@ type Args = {|
   selectedTaskIds: Id[],
   source: DraggableLocation,
   destination: DraggableLocation,
-|}
+|};
 
 export type Result = {|
   entities: Entities,
   // a drop operations can change the order of the selected task array
   selectedTaskIds: Id[],
-|}
+|};
 
 const withNewTaskIds = (column: Column, taskIds: Id[]): Column => ({
   id: column.id,
@@ -38,7 +39,6 @@ const reorderSingleDrag = ({
       destination.index,
     );
 
-    // $ExpectError - using spread
     const updated: Entities = {
       ...entities,
       columns: {
@@ -68,7 +68,6 @@ const reorderSingleDrag = ({
   const newForeignTaskIds: Id[] = [...foreign.taskIds];
   newForeignTaskIds.splice(destination.index, 0, taskId);
 
-  // $ExpectError - using spread
   const updated: Entities = {
     ...entities,
     columns: {
@@ -92,10 +91,7 @@ export const getHomeColumn = (entities: Entities, taskId: TaskId): Column => {
     return column.taskIds.includes(taskId);
   });
 
-  if (!columnId) {
-    console.error('Count not find column for task', taskId, entities);
-    throw new Error('boom');
-  }
+  invariant(columnId, 'Count not find column for task');
 
   return entities.columns[columnId];
 };
@@ -132,7 +128,9 @@ const reorderMultiDrag = ({
         // the selected item is before the destination index
         // we need to account for this when inserting into the new location
         return previous + 1;
-      }, 0);
+      },
+      0,
+    );
 
     const result: number = destination.index - destinationIndexOffset;
     return result;
@@ -171,12 +169,14 @@ const reorderMultiDrag = ({
 
       // remove the id's of the items that are selected
       const remainingTaskIds: TaskId[] = column.taskIds.filter(
-        (id: TaskId): boolean => !selectedTaskIds.includes(id)
+        (id: TaskId): boolean => !selectedTaskIds.includes(id),
       );
 
       previous[column.id] = withNewTaskIds(column, remainingTaskIds);
       return previous;
-    }, entities.columns);
+    },
+    entities.columns,
+  );
 
   const final: Column = withRemovedTasks[destination.droppableId];
   const withInserted: TaskId[] = (() => {
@@ -191,7 +191,6 @@ const reorderMultiDrag = ({
     [final.id]: withNewTaskIds(final, withInserted),
   };
 
-  // $ExpectError - using spread
   const updated: Entities = {
     ...entities,
     columns: withAddedTasks,
@@ -214,7 +213,7 @@ export const multiSelectTo = (
   entities: Entities,
   selectedTaskIds: Id[],
   newTaskId: TaskId,
-): ?Id[] => {
+): ?(Id[]) => {
   // Nothing already selected
   if (!selectedTaskIds.length) {
     return [newTaskId];
@@ -250,14 +249,13 @@ export const multiSelectTo = (
   // everything inbetween needs to have it's selection toggled.
   // with the exception of the start and end values which will always be selected
 
-  const toAdd: Id[] = inBetween
-    .filter((taskId: Id): boolean => {
-      // if already selected: then no need to select it again
-      if (selectedTaskIds.includes(taskId)) {
-        return false;
-      }
-      return true;
-    });
+  const toAdd: Id[] = inBetween.filter((taskId: Id): boolean => {
+    // if already selected: then no need to select it again
+    if (selectedTaskIds.includes(taskId)) {
+      return false;
+    }
+    return true;
+  });
 
   const sorted: Id[] = isSelectingForwards ? toAdd : [...toAdd].reverse();
   const combined: Id[] = [...selectedTaskIds, ...sorted];

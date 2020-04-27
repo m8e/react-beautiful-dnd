@@ -1,282 +1,372 @@
 // @flow
-import type { Node } from 'react';
+import { type Position } from 'css-box-model';
+// eslint-disable-next-line
+import { Component } from 'react';
 import memoizeOne from 'memoize-one';
 import { connect } from 'react-redux';
-import { createSelector } from 'reselect';
 import Draggable from './draggable';
-import { storeKey } from '../context-keys';
-import { negate } from '../../state/position';
-import getDisplacementMap, { type DisplacementMap } from '../../state/get-displacement-map';
-import {
-  lift as liftAction,
-  move as moveAction,
-  moveForward as moveForwardAction,
-  moveBackward as moveBackwardAction,
-  crossAxisMoveForward as crossAxisMoveForwardAction,
-  crossAxisMoveBackward as crossAxisMoveBackwardAction,
-  drop as dropAction,
-  cancel as cancelAction,
-  dropAnimationFinished as dropAnimationFinishedAction,
-  moveByWindowScroll as moveByWindowScrollAction,
-} from '../../state/action-creators';
+import { origin, negate } from '../../state/position';
+import isStrictEqual from '../is-strict-equal';
+import * as animation from '../../animation';
+import { dropAnimationFinished as dropAnimationFinishedAction } from '../../state/action-creators';
 import type {
   State,
-  Position,
   DraggableId,
   DroppableId,
-  DragMovement,
   DraggableDimension,
-  Direction,
   Displacement,
-  PendingDrop,
+  CompletedDrag,
+  DragImpact,
+  MovementMode,
+  DropResult,
+  LiftEffect,
+  Combine,
 } from '../../types';
 import type {
   MapProps,
   OwnProps,
-  DefaultProps,
   DispatchProps,
   Selector,
+  StateSnapshot,
+  DropAnimation,
 } from './draggable-types';
+import whatIsDraggedOver from '../../state/droppable/what-is-dragged-over';
+import StoreContext from '../context/store-context';
+import whatIsDraggedOverFromResult from '../../state/droppable/what-is-dragged-over-from-result';
+import { tryGetCombine } from '../../state/get-impact-location';
 
-const origin: Position = { x: 0, y: 0 };
-
-const defaultMapProps: MapProps = {
-  isDropAnimating: false,
-  isDragging: false,
-  offset: origin,
-  shouldAnimateDragMovement: false,
-  // This is set to true by default so that as soon as Draggable
-  // needs to be displaced it can without needing to change this flag
-  shouldAnimateDisplacement: true,
-  // these properties are only populated when the item is dragging
-  dimension: null,
-  direction: null,
-  draggingOver: null,
+const getCombineWithFromResult = (result: DropResult): ?DraggableId => {
+  return result.combine ? result.combine.draggableId : null;
 };
 
-export const makeSelector = (): Selector => {
-  const memoizedOffset = memoizeOne(
-    (x: number, y: number): Position => ({
-      x, y,
-    }),
-  );
+const getCombineWithFromImpact = (impact: DragImpact): ?DraggableId => {
+  return impact.at && impact.at.type === 'COMBINE'
+    ? impact.at.combine.draggableId
+    : null;
+};
 
-  const getNotDraggingProps = memoizeOne(
-    (offset: Position, shouldAnimateDisplacement: boolean): MapProps => ({
-      isDropAnimating: false,
-      isDragging: false,
-      offset,
-      shouldAnimateDisplacement,
-      // not relevant
-      shouldAnimateDragMovement: false,
-      dimension: null,
-      direction: null,
-      draggingOver: null,
-    }),
-  );
+type TrySelect = (state: State, ownProps: OwnProps) => ?MapProps;
 
-  const getDraggingProps = memoizeOne((
-    offset: Position,
-    shouldAnimateDragMovement: boolean,
-    dimension: DraggableDimension,
-    // direction of the droppable you are over
-    direction: ?Direction,
-    // the id of the droppable you are over
-    draggingOver: ?DroppableId,
-  ): MapProps => ({
-    isDragging: true,
-    isDropAnimating: false,
-    shouldAnimateDisplacement: false,
-    offset,
-    shouldAnimateDragMovement,
-    dimension,
-    direction,
-    draggingOver,
+function getDraggableSelector(): TrySelect {
+  const memoizedOffset = memoizeOne((x: number, y: number): Position => ({
+    x,
+    y,
   }));
 
-  const draggingSelector = (state: State, ownProps: OwnProps): ?MapProps => {
-    if (state.phase !== 'DRAGGING' && state.phase !== 'DROP_ANIMATING') {
-      return null;
-    }
+  const getMemoizedSnapshot = memoizeOne(
+    (
+      mode: MovementMode,
+      isClone: boolean,
+      draggingOver: ?DroppableId,
+      combineWith: ?DraggableId,
+      dropping: ?DropAnimation,
+    ): StateSnapshot => ({
+      isDragging: true,
+      isClone,
+      isDropAnimating: Boolean(dropping),
+      dropAnimation: dropping,
+      mode,
+      draggingOver,
+      combineWith,
+      combineTargetFor: null,
+    }),
+  );
 
-    if (state.phase === 'DRAGGING') {
-      if (!state.drag) {
-        console.error('invalid drag state found in selector');
-        return null;
-      }
-
-      // not the dragging item
-      if (state.drag.initial.descriptor.id !== ownProps.draggableId) {
-        return null;
-      }
-
-      const offset: Position = state.drag.current.client.offset;
-      const dimension: DraggableDimension = state.dimension.draggable[ownProps.draggableId];
-      const direction: ?Direction = state.drag.impact.direction;
-      const shouldAnimateDragMovement: boolean = state.drag.current.shouldAnimate;
-      const draggingOver: ?DroppableId = state.drag.impact.destination ?
-        state.drag.impact.destination.droppableId :
-        null;
-
-      return getDraggingProps(
-        memoizedOffset(offset.x, offset.y),
-        shouldAnimateDragMovement,
-        dimension,
-        direction,
+  const getMemoizedProps = memoizeOne((
+    offset: Position,
+    mode: MovementMode,
+    dimension: DraggableDimension,
+    isClone: boolean,
+    // the id of the droppable you are over
+    draggingOver: ?DroppableId,
+    // the id of a draggable you are grouping with
+    combineWith: ?DraggableId,
+    forceShouldAnimate: ?boolean,
+  ): MapProps => ({
+    mapped: {
+      type: 'DRAGGING',
+      dropping: null,
+      draggingOver,
+      combineWith,
+      mode,
+      offset,
+      dimension,
+      forceShouldAnimate,
+      snapshot: getMemoizedSnapshot(
+        mode,
+        isClone,
         draggingOver,
+        combineWith,
+        null,
+      ),
+    },
+  }));
+
+  const selector: TrySelect = (state: State, ownProps: OwnProps): ?MapProps => {
+    // Dragging
+    if (state.isDragging) {
+      // not the dragging item
+      if (state.critical.draggable.id !== ownProps.draggableId) {
+        return null;
+      }
+
+      const offset: Position = state.current.client.offset;
+      const dimension: DraggableDimension =
+        state.dimensions.draggables[ownProps.draggableId];
+      // const shouldAnimateDragMovement: boolean = state.shouldAnimate;
+      const draggingOver: ?DroppableId = whatIsDraggedOver(state.impact);
+      const combineWith: ?DraggableId = getCombineWithFromImpact(state.impact);
+      const forceShouldAnimate: ?boolean = state.forceShouldAnimate;
+
+      return getMemoizedProps(
+        memoizedOffset(offset.x, offset.y),
+        state.movementMode,
+        dimension,
+        ownProps.isClone,
+        draggingOver,
+        combineWith,
+        forceShouldAnimate,
       );
     }
 
-    // dropping
+    // Dropping
+    if (state.phase === 'DROP_ANIMATING') {
+      const completed: CompletedDrag = state.completed;
+      if (completed.result.draggableId !== ownProps.draggableId) {
+        return null;
+      }
 
-    const pending: ?PendingDrop = state.drop && state.drop.pending;
+      const isClone: boolean = ownProps.isClone;
+      const dimension: DraggableDimension =
+        state.dimensions.draggables[ownProps.draggableId];
+      const result: DropResult = completed.result;
+      const mode: MovementMode = result.mode;
+      // these need to be pulled from the result as they can be different to the final impact
+      const draggingOver: ?DroppableId = whatIsDraggedOverFromResult(result);
+      const combineWith: ?DraggableId = getCombineWithFromResult(result);
+      const duration: number = state.dropDuration;
 
-    if (!pending) {
-      console.error('cannot provide props for dropping item when there is invalid state');
-      return null;
+      // not memoized as it is the only execution
+      const dropping: DropAnimation = {
+        duration,
+        curve: animation.curves.drop,
+        moveTo: state.newHomeClientOffset,
+        opacity: combineWith ? animation.combine.opacity.drop : null,
+        scale: combineWith ? animation.combine.scale.drop : null,
+      };
+
+      return {
+        mapped: {
+          type: 'DRAGGING',
+          offset: state.newHomeClientOffset,
+          dimension,
+          dropping,
+          draggingOver,
+          combineWith,
+          mode,
+          forceShouldAnimate: null,
+          snapshot: getMemoizedSnapshot(
+            mode,
+            isClone,
+            draggingOver,
+            combineWith,
+            dropping,
+          ),
+        },
+      };
     }
 
-    // this was not the dragging item
-    if (pending.result.draggableId !== ownProps.draggableId) {
-      return null;
-    }
-
-    const draggingOver: ?DroppableId = pending.result.destination ?
-      pending.result.destination.droppableId : null;
-    const direction: ?Direction = pending.impact.direction ?
-      pending.impact.direction : null;
-
-    // not memoized as it is the only execution
-    return {
-      isDragging: false,
-      isDropAnimating: true,
-      offset: pending.newHomeOffset,
-      // still need to provide the dimension for the placeholder
-      dimension: state.dimension.draggable[ownProps.draggableId],
-      draggingOver,
-      direction,
-      // animation will be controlled by the isDropAnimating flag
-      shouldAnimateDragMovement: false,
-      // not relevant,
-      shouldAnimateDisplacement: false,
-    };
+    return null;
   };
 
-  const getOutOfTheWayMovement = (id: DraggableId, movement: DragMovement): ?MapProps => {
-    // Doing this cuts 50% of the time to move
-    // Otherwise need to loop over every item in every selector (yuck!)
-    const map: DisplacementMap = getDisplacementMap(movement.displaced);
-    const displacement: ?Displacement = map[id];
+  return selector;
+}
 
-    // does not need to move
-    if (!displacement) {
-      return null;
+function getSecondarySnapshot(combineTargetFor: ?DraggableId): StateSnapshot {
+  return {
+    isDragging: false,
+    isDropAnimating: false,
+    isClone: false,
+    dropAnimation: null,
+    mode: null,
+    draggingOver: null,
+    combineTargetFor,
+    combineWith: null,
+  };
+}
+
+const atRest: MapProps = {
+  mapped: {
+    type: 'SECONDARY',
+    offset: origin,
+    combineTargetFor: null,
+    shouldAnimateDisplacement: true,
+    snapshot: getSecondarySnapshot(null),
+  },
+};
+
+function getSecondarySelector(): TrySelect {
+  const memoizedOffset = memoizeOne((x: number, y: number): Position => ({
+    x,
+    y,
+  }));
+
+  const getMemoizedSnapshot = memoizeOne(getSecondarySnapshot);
+
+  const getMemoizedProps = memoizeOne(
+    (
+      offset: Position,
+      combineTargetFor: ?DraggableId = null,
+      shouldAnimateDisplacement: boolean,
+    ): MapProps => ({
+      mapped: {
+        type: 'SECONDARY',
+        offset,
+        combineTargetFor,
+        shouldAnimateDisplacement,
+        snapshot: getMemoizedSnapshot(combineTargetFor),
+      },
+    }),
+  );
+
+  // Is we are the combine target for something then we need to publish that
+  // otherwise we will return null to get the default props
+  const getFallback = (combineTargetFor: ?DraggableId): ?MapProps => {
+    return combineTargetFor
+      ? getMemoizedProps(origin, combineTargetFor, true)
+      : null;
+  };
+
+  const getProps = (
+    ownId: DraggableId,
+    draggingId: DraggableId,
+    impact: DragImpact,
+    afterCritical: LiftEffect,
+  ): ?MapProps => {
+    const visualDisplacement: ?Displacement = impact.displaced.visible[ownId];
+    const isAfterCriticalInVirtualList: boolean = Boolean(
+      afterCritical.inVirtualList && afterCritical.effected[ownId],
+    );
+
+    const combine: ?Combine = tryGetCombine(impact);
+    const combineTargetFor: ?DraggableId =
+      combine && combine.draggableId === ownId ? draggingId : null;
+
+    if (!visualDisplacement) {
+      if (!isAfterCriticalInVirtualList) {
+        return getFallback(combineTargetFor);
+      }
+
+      // After critical but not visibly displaced in a virtual list
+      // This can occur if:
+      // 1. the item is not visible (displaced.invisible)
+      // 2. We have moved out of the home list.
+
+      // Don't need to do anything - item is invisible
+      if (impact.displaced.invisible[ownId]) {
+        return null;
+      }
+
+      // We are no longer over the home list.
+      // We need to move backwards to close the gap that the dragging item has left
+      const change: Position = negate(afterCritical.displacedBy.point);
+      const offset: Position = memoizedOffset(change.x, change.y);
+      return getMemoizedProps(offset, combineTargetFor, true);
     }
 
-    // do not need to do anything
-    if (!displacement.isVisible) {
-      return null;
+    if (isAfterCriticalInVirtualList) {
+      // In a virtual list the removal of a dragging item does
+      // not cause the list to collapse. So when something is 'displaced'
+      // we can just leave it in the original spot.
+      return getFallback(combineTargetFor);
     }
+    const displaceBy: Position = impact.displacedBy.point;
+    const offset: Position = memoizedOffset(displaceBy.x, displaceBy.y);
 
-    const amount: Position = movement.isBeyondStartPosition ?
-      negate(movement.amount) :
-      movement.amount;
-
-    return getNotDraggingProps(
-      memoizedOffset(amount.x, amount.y),
-      displacement.shouldAnimate
+    return getMemoizedProps(
+      offset,
+      combineTargetFor,
+      visualDisplacement.shouldAnimate,
     );
   };
 
-  const movingOutOfTheWaySelector = (state: State, ownProps: OwnProps): ?MapProps => {
-    if (state.phase !== 'DRAGGING' && state.phase !== 'DROP_ANIMATING') {
-      return null;
-    }
-
-    if (state.phase === 'DRAGGING') {
-      if (!state.drag) {
-        console.error('cannot correctly move item out of the way when there is invalid state');
-        return null;
-      }
-
+  const selector: TrySelect = (state: State, ownProps: OwnProps): ?MapProps => {
+    // Dragging
+    if (state.isDragging) {
       // we do not care about the dragging item
-      if (state.drag.initial.descriptor.id === ownProps.draggableId) {
+      if (state.critical.draggable.id === ownProps.draggableId) {
         return null;
       }
 
-      return getOutOfTheWayMovement(ownProps.draggableId, state.drag.impact.movement);
+      return getProps(
+        ownProps.draggableId,
+        state.critical.draggable.id,
+        state.impact,
+        state.afterCritical,
+      );
     }
 
-    // state.phase === 'DROP_ANIMATING'
-    if (!state.drop || !state.drop.pending) {
-      console.error('cannot provide props for dropping item when there is invalid state');
-      return null;
+    // Dropping
+    if (state.phase === 'DROP_ANIMATING') {
+      const completed: CompletedDrag = state.completed;
+      // do nothing if this was the dragging item
+      if (completed.result.draggableId === ownProps.draggableId) {
+        return null;
+      }
+      return getProps(
+        ownProps.draggableId,
+        completed.result.draggableId,
+        completed.impact,
+        completed.afterCritical,
+      );
     }
 
-    // do nothing if this was the dragging item
-    if (state.drop.pending.result.draggableId === ownProps.draggableId) {
-      return null;
-    }
-
-    return getOutOfTheWayMovement(ownProps.draggableId, state.drop.pending.impact.movement);
+    // Otherwise
+    return null;
   };
 
-  return createSelector(
-    [
-      draggingSelector,
-      movingOutOfTheWaySelector,
-    ],
-    (
-      dragging: ?MapProps,
-      movingOutOfTheWay: ?MapProps,
-    ): MapProps => {
-      if (dragging) {
-        return dragging;
-      }
+  return selector;
+}
 
-      if (movingOutOfTheWay) {
-        return movingOutOfTheWay;
-      }
+// Returning a function to ensure each
+// Draggable gets its own selector
+export const makeMapStateToProps = (): Selector => {
+  const draggingSelector: TrySelect = getDraggableSelector();
+  const secondarySelector: TrySelect = getSecondarySelector();
 
-      return defaultMapProps;
-    },
-  );
-};
+  const selector = (state: State, ownProps: OwnProps): MapProps =>
+    draggingSelector(state, ownProps) ||
+    secondarySelector(state, ownProps) ||
+    atRest;
 
-const makeMapStateToProps = () => {
-  const selector: Selector = makeSelector();
-  return (state: State, props: OwnProps) => selector(state, props);
+  return selector;
 };
 
 const mapDispatchToProps: DispatchProps = {
-  lift: liftAction,
-  move: moveAction,
-  moveForward: moveForwardAction,
-  moveBackward: moveBackwardAction,
-  crossAxisMoveForward: crossAxisMoveForwardAction,
-  crossAxisMoveBackward: crossAxisMoveBackwardAction,
-  moveByWindowScroll: moveByWindowScrollAction,
-  drop: dropAction,
   dropAnimationFinished: dropAnimationFinishedAction,
-  cancel: cancelAction,
 };
 
 // Leaning heavily on the default shallow equality checking
 // that `connect` provides.
-// It avoids needing to do it own within `Draggable`
-const ConnectedDraggable: OwnProps => Node = (connect(
-  // returning a function to ensure each
-  // Draggable gets its own selector
-  (makeMapStateToProps: any),
-  (mapDispatchToProps: any),
+// It avoids needing to do it own within `<Draggable />`
+const ConnectedDraggable = connect(
+  // returning a function so each component can do its own memoization
+  makeMapStateToProps,
+  mapDispatchToProps,
+  // mergeProps: use default
   null,
-  { storeKey },
-): any)(Draggable);
-
-ConnectedDraggable.defaultProps = ({
-  isDragDisabled: false,
-  // cannot drag interactive elements by default
-  disableInteractiveElementBlocking: false,
-}: DefaultProps);
+  // options
+  // $FlowFixMe: current react-redux type does not know about context property
+  {
+    // Using our own context for the store to avoid clashing with consumers
+    context: StoreContext,
+    // Default value, but being really clear
+    pure: true,
+    // When pure, compares the result of mapStateToProps to its previous value.
+    // Default value: shallowEqual
+    // Switching to a strictEqual as we return a memoized object on changes
+    areStatePropsEqual: isStrictEqual,
+  },
+)(Draggable);
 
 export default ConnectedDraggable;

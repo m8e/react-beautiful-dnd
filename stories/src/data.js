@@ -1,37 +1,56 @@
 // @flow
+import { colors } from '@atlaskit/theme';
 import type { Author, Quote, QuoteMap } from './types';
+import finnImg from '../static/media/finn-min.png';
+import bmoImg from '../static/media/bmo-min.png';
+import princessImg from '../static/media/princess-min.png';
+import jakeImg from '../static/media/jake-min.png';
 
 const jake: Author = {
   id: '1',
   name: 'Jake',
   url: 'http://adventuretime.wikia.com/wiki/Jake',
-  avatarUrl: 'https://68.media.tumblr.com/avatar_1f7bdbbeb59c_128.png',
+  avatarUrl: jakeImg,
+  colors: {
+    soft: colors.Y50,
+    hard: colors.N400A,
+  },
 };
 
 const BMO: Author = {
   id: '2',
   name: 'BMO',
   url: 'http://adventuretime.wikia.com/wiki/BMO',
-  avatarUrl: 'https://68.media.tumblr.com/avatar_1a34fe6de498_128.png',
+  avatarUrl: bmoImg,
+  colors: {
+    soft: colors.G50,
+    hard: colors.N400A,
+  },
 };
 
 const finn: Author = {
   id: '3',
   name: 'Finn',
   url: 'http://adventuretime.wikia.com/wiki/Finn',
-  avatarUrl: 'https://68.media.tumblr.com/avatar_09404f3287c6_128.png',
+  avatarUrl: finnImg,
+  colors: {
+    soft: colors.B50,
+    hard: colors.N400A,
+  },
 };
 
 const princess: Author = {
   id: '4',
   name: 'Princess bubblegum',
   url: 'http://adventuretime.wikia.com/wiki/Princess_Bubblegum',
-  avatarUrl: 'https://68.media.tumblr.com/avatar_ec98529441c4_128.png',
+  avatarUrl: princessImg,
+  colors: {
+    soft: colors.P50,
+    hard: colors.N400A,
+  },
 };
 
-export const authors: Author[] = [
-  jake, BMO, finn, princess,
-];
+export const authors: Author[] = [jake, BMO, finn, princess];
 
 export const quotes: Quote[] = [
   {
@@ -41,12 +60,13 @@ export const quotes: Quote[] = [
   },
   {
     id: '2',
-    content: 'Sucking at something is the first step towards being sorta good at something.',
+    content:
+      'Sucking at something is the first step towards being sorta good at something.',
     author: jake,
   },
   {
     id: '3',
-    content: 'You got to focus on what\'s real, man',
+    content: "You got to focus on what's real, man",
     author: jake,
   },
   {
@@ -66,17 +86,18 @@ export const quotes: Quote[] = [
   },
   {
     id: '7',
-    content: 'That\'s it! The answer was so simple, I was too smart to see it!, That\'s it! The answer was so simple, I was too smart to see it!, That\'s it! The answer was so simple, I was too smart to see it!, That\'s it! The answer was so simple, I was too smart to see it!',
+    content: "That's it! The answer was so simple, I was too smart to see it!",
     author: princess,
   },
   {
     id: '8',
-    content: 'People make mistakes. It’s a part of growing up',
+    content:
+      "People make mistakes. It's all a part of growing up and you never really stop growing",
     author: finn,
   },
   {
     id: '9',
-    content: 'Don\'t you always call sweatpants \'give up on life pants,\' Jake?',
+    content: "Don't you always call sweatpants 'give up on life pants,' Jake?",
     author: finn,
   },
   {
@@ -91,21 +112,21 @@ export const quotes: Quote[] = [
   },
   {
     id: '12',
-    content: 'Haven\'t slept for a solid 83 hours, but, yeah, I\'m good.',
+    content: "Haven't slept for a solid 83 hours, but, yeah, I'm good.",
     author: princess,
   },
 ];
 
-let idCount: number = 0;
+// So we do not have any clashes with our hardcoded ones
+let idCount: number = quotes.length + 1;
 
 export const getQuotes = (count: number): Quote[] =>
   Array.from({ length: count }, (v, k) => k).map(() => {
     const random: Quote = quotes[Math.floor(Math.random() * quotes.length)];
 
     const custom: Quote = {
-      id: `quote-${idCount++}`,
-      content: random.content,
-      author: random.author,
+      ...random,
+      id: `G${idCount++}`,
     };
 
     return custom;
@@ -116,10 +137,8 @@ export const getAuthors = (count: number): Author[] =>
     const random: Author = authors[Math.floor(Math.random() * authors.length)];
 
     const custom: Author = {
+      ...random,
       id: `author-${idCount++}`,
-      name: random.name,
-      avatarUrl: random.avatarUrl,
-      url: random.url,
     };
 
     return custom;
@@ -128,16 +147,19 @@ export const getAuthors = (count: number): Author[] =>
 const getByAuthor = (author: Author, items: Quote[]): Quote[] =>
   items.filter((quote: Quote) => quote.author === author);
 
-export const authorQuoteMap: QuoteMap =
-  authors.reduce((previous: QuoteMap, author: Author) => ({
-    ...previous,
-    [author.name]: getByAuthor(author, quotes),
-  }), {});
-
-export const generateQuoteMap = (total: number): QuoteMap => authors.reduce(
+export const authorQuoteMap: QuoteMap = authors.reduce(
   (previous: QuoteMap, author: Author) => ({
     ...previous,
-    [author.name]: getQuotes(total / authors.length),
+    [author.name]: getByAuthor(author, quotes),
   }),
-  {}
+  {},
 );
+
+export const generateQuoteMap = (quoteCount: number): QuoteMap =>
+  authors.reduce(
+    (previous: QuoteMap, author: Author) => ({
+      ...previous,
+      [author.name]: getQuotes(quoteCount / authors.length),
+    }),
+    {},
+  );

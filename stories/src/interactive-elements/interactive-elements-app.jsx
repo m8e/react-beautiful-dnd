@@ -1,8 +1,9 @@
 // @flow
 import React, { type Node } from 'react';
-import styled from 'styled-components';
-import { DragDropContext, Droppable, Draggable } from '../../../src/';
-import { grid, colors } from '../constants';
+import styled from '@emotion/styled';
+import { colors } from '@atlaskit/theme';
+import { DragDropContext, Droppable, Draggable } from '../../../src';
+import { grid } from '../constants';
 import reorder from '../reorder';
 import type {
   DropResult,
@@ -13,7 +14,7 @@ import type {
 type ItemType = {|
   id: string,
   component: Node,
-|}
+|};
 
 const initial: ItemType[] = [
   {
@@ -21,18 +22,26 @@ const initial: ItemType[] = [
     component: (
       <div>
         <p>Standard</p>
-        <button>hello world</button><br />
-        <p>With child{' '}
+        <button type="button">hello world</button>
+        <br />
+        <p>
+          With child{' '}
           <a
             href="https://developer.mozilla.org/en-US/docs/Web/Guide/HTML/Content_categories#Phrasing_content"
             target="_blank"
             rel="noopener noreferrer"
           >
-              phrasing content
+            phrasing content
           </a>
         </p>
-        <button>why <strong>hello <em>there!</em></strong></button>
-        <p>With child{' '}
+        <button type="button">
+          why{' '}
+          <strong>
+            hello <em>there!</em>
+          </strong>
+        </button>
+        <p>
+          With child{' '}
           <a
             href="https://developer.mozilla.org/en-US/docs/Web/API/SVGElement"
             target="_blank"
@@ -41,7 +50,7 @@ const initial: ItemType[] = [
             SVGElement
           </a>
         </p>
-        <button>
+        <button type="button">
           My circle <br />
           <svg width="40" height="40">
             <circle cx="20" cy="20" r="20" />
@@ -62,9 +71,7 @@ const initial: ItemType[] = [
   },
   {
     id: 'textarea',
-    component: (
-      <textarea placeholder="type some text here" />
-    ),
+    component: <textarea placeholder="type some text here" />,
   },
   {
     id: 'input',
@@ -108,9 +115,7 @@ const initial: ItemType[] = [
   },
   {
     id: 'range',
-    component: (
-      <input type="range" min="1" max="100" />
-    ),
+    component: <input type="range" min="1" max="100" />,
   },
   {
     id: 'content editable',
@@ -131,14 +136,14 @@ const initial: ItemType[] = [
 
 const List = styled.div`
   width: 250px;
-  background-color: ${colors.blue.deep};
+  background-color: ${colors.B200};
   padding: ${grid * 2}px;
 `;
 
 const Item = styled.div`
   min-height: 80px;
-  background-color: ${colors.white};
-  border: 1px solid ${colors.grey.dark};
+  background-color: ${colors.N0};
+  border: 1px solid ${colors.N100};
   padding: ${grid}px;
   margin-bottom: ${grid}px;
 `;
@@ -153,19 +158,19 @@ const Controls = styled.div`
 `;
 
 const Status = styled.strong`
-  color: ${({ isEnabled }) => (isEnabled ? colors.blue.deep : colors.purple)};
+  color: ${({ isEnabled }) => (isEnabled ? colors.B200 : colors.P100)};
 `;
 
 type State = {|
   canDragInteractiveElements: boolean,
   items: ItemType[],
-|}
+|};
 
 export default class InteractiveElementsApp extends React.Component<*, State> {
   state: State = {
     items: initial,
     canDragInteractiveElements: false,
-  }
+  };
 
   onDragEnd = (result: DropResult) => {
     if (!result.destination) {
@@ -179,19 +184,19 @@ export default class InteractiveElementsApp extends React.Component<*, State> {
     const items = reorder(
       this.state.items,
       result.source.index,
-      result.destination.index
+      result.destination.index,
     );
 
     this.setState({
       items,
     });
-  }
+  };
 
   toggleBlocking = () => {
     this.setState({
       canDragInteractiveElements: !this.state.canDragInteractiveElements,
     });
-  }
+  };
 
   render() {
     const { canDragInteractiveElements } = this.state;
@@ -202,42 +207,43 @@ export default class InteractiveElementsApp extends React.Component<*, State> {
           <Droppable droppableId="droppable">
             {(droppableProvided: DroppableProvided) => (
               <List
-                innerRef={droppableProvided.innerRef}
+                ref={droppableProvided.innerRef}
                 {...droppableProvided.droppableProps}
               >
                 {this.state.items.map((item: ItemType, index: number) => (
                   <Draggable
                     key={item.id}
                     draggableId={item.id}
-                    disableInteractiveElementBlocking={canDragInteractiveElements}
+                    disableInteractiveElementBlocking={
+                      canDragInteractiveElements
+                    }
                     index={index}
                   >
                     {(draggableProvided: DraggableProvided) => (
-                      <div>
-                        <Item
-                          innerRef={draggableProvided.innerRef}
-                          {...draggableProvided.draggableProps}
-                          {...draggableProvided.dragHandleProps}
-                        >
-                          {item.component}
-                        </Item>
-                        {draggableProvided.placeholder}
-                      </div>
-                  )}
+                      <Item
+                        ref={draggableProvided.innerRef}
+                        {...draggableProvided.draggableProps}
+                        {...draggableProvided.dragHandleProps}
+                      >
+                        {item.component}
+                      </Item>
+                    )}
                   </Draggable>
-              ))}
+                ))}
                 {droppableProvided.placeholder}
               </List>
-          )}
+            )}
           </Droppable>
           <Controls>
             <p>
-              Dragging from interactive elements is {' '}
+              Dragging from interactive elements is{' '}
               <Status isEnabled={canDragInteractiveElements}>
                 {canDragInteractiveElements ? 'enabled' : 'disabled'}
               </Status>
             </p>
-            <button onClick={this.toggleBlocking}>toggle</button>
+            <button type="button" onClick={this.toggleBlocking}>
+              toggle
+            </button>
           </Controls>
         </Container>
       </DragDropContext>

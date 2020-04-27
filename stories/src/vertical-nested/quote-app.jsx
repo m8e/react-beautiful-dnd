@@ -1,15 +1,16 @@
 // @flow
 import React, { Component } from 'react';
-import styled from 'styled-components';
-import { action } from '@storybook/addon-actions';
-import { DragDropContext } from '../../../src/';
-import { colors, grid } from '../constants';
+import styled from '@emotion/styled';
+import { colors } from '@atlaskit/theme';
+import { invariant } from '../../../src/invariant';
+import { DragDropContext } from '../../../src';
+import { grid } from '../constants';
 import QuoteList from './quote-list';
 import reorder from '../reorder';
 import { getQuotes } from '../data';
 import type { Quote } from '../types';
 import type { NestedQuoteList } from './types';
-import type { DropResult, DragStart } from '../../../src/types';
+import type { DropResult } from '../../../src/types';
 
 const quotes: Quote[] = getQuotes(10);
 
@@ -27,11 +28,8 @@ const initialList: NestedQuoteList = {
   ],
 };
 
-const publishOnDragStart = action('onDragStart');
-const publishOnDragEnd = action('onDragEnd');
-
 const Root = styled.div`
-  background-color: ${colors.blue.deep};
+  background-color: ${colors.B200};
   box-sizing: border-box;
   padding: ${grid * 2}px;
   min-height: 100vh;
@@ -44,7 +42,7 @@ const Root = styled.div`
 
 type State = {|
   list: NestedQuoteList,
-|}
+|};
 
 export default class QuoteApp extends Component<*, State> {
   /* eslint-disable react/sort-comp */
@@ -53,13 +51,7 @@ export default class QuoteApp extends Component<*, State> {
   };
   /* eslint-enable */
 
-  onDragStart = (initial: DragStart) => {
-    publishOnDragStart(initial);
-  }
-
   onDragEnd = (result: DropResult) => {
-    publishOnDragEnd(result);
-
     // dropped outside the list
     if (!result.destination) {
       return;
@@ -72,7 +64,6 @@ export default class QuoteApp extends Component<*, State> {
         result.destination.index,
       );
 
-      // $ExpectError - using spread
       const list: NestedQuoteList = {
         ...this.state.list,
         children,
@@ -86,15 +77,12 @@ export default class QuoteApp extends Component<*, State> {
 
     if (result.type === 'second-level') {
       const nested: ?NestedQuoteList = (this.state.list.children.filter(
-        (item: mixed): boolean => Object.prototype.hasOwnProperty.call(item, 'children')
-      )[0] : any);
+        (item: mixed): boolean =>
+          Object.prototype.hasOwnProperty.call(item, 'children'),
+      )[0]: any);
 
-      if (!nested) {
-        console.error('could not find nested list');
-        return;
-      }
+      invariant(nested, 'could not find nested list');
 
-      // $ExpectError - using spread
       const updated: NestedQuoteList = {
         ...nested,
         children: reorder(
@@ -109,7 +97,6 @@ export default class QuoteApp extends Component<*, State> {
       const children = Array.from(this.state.list.children);
       children[nestedIndex] = updated;
 
-      // $ExpectError - using spread
       const list: NestedQuoteList = {
         ...this.state.list,
         children,
@@ -119,16 +106,13 @@ export default class QuoteApp extends Component<*, State> {
         list,
       });
     }
-  }
+  };
 
   render() {
     const { list } = this.state;
 
     return (
-      <DragDropContext
-        onDragStart={this.onDragStart}
-        onDragEnd={this.onDragEnd}
-      >
+      <DragDropContext onDragEnd={this.onDragEnd}>
         <Root>
           <QuoteList list={list} />
         </Root>

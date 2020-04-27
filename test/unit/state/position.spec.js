@@ -1,4 +1,5 @@
 // @flow
+import { type Position } from 'css-box-model';
 import {
   add,
   apply,
@@ -9,7 +10,6 @@ import {
   distance,
   closest,
 } from '../../../src/state/position';
-import type { Position } from '../../../src/types';
 
 const point1: Position = {
   x: 10,
@@ -127,7 +127,9 @@ describe('position', () => {
       const option1 = { x: 1, y: 1 };
       const option2 = { x: 2, y: 2 };
 
-      expect(closest(origin, [option1, option2])).toEqual(distance(origin, option1));
+      expect(closest(origin, [option1, option2])).toEqual(
+        distance(origin, option1),
+      );
     });
   });
 

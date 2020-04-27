@@ -1,172 +1,280 @@
 // @flow
-import type { Node } from 'react';
+// eslint-disable-next-line no-unused-vars
+import { Component } from 'react';
 import { connect } from 'react-redux';
-import { createSelector } from 'reselect';
 import memoizeOne from 'memoize-one';
-import { storeKey } from '../context-keys';
-import {
-  dragSelector,
-  pendingDropSelector,
-  phaseSelector,
-  draggingDraggableSelector,
-} from '../../state/selectors';
-import Droppable from './droppable';
+import { invariant } from '../../invariant';
 import type {
-  Phase,
-  PendingDrop,
-  DragState,
   State,
   DroppableId,
   DraggableId,
-  DraggableLocation,
+  CompletedDrag,
   DraggableDimension,
-  Placeholder,
+  DimensionMap,
+  TypeId,
+  Critical,
+  DraggableRubric,
+  DraggableDescriptor,
 } from '../../types';
 import type {
+  MapProps,
   OwnProps,
   DefaultProps,
-  MapProps,
   Selector,
+  DispatchProps,
+  StateSnapshot,
+  UseClone,
+  DraggableChildrenFn,
 } from './droppable-types';
+import Droppable from './droppable';
+import isStrictEqual from '../is-strict-equal';
+import whatIsDraggedOver from '../../state/droppable/what-is-dragged-over';
+import { updateViewportMaxScroll as updateViewportMaxScrollAction } from '../../state/action-creators';
+import StoreContext from '../context/store-context';
+import whatIsDraggedOverFromResult from '../../state/droppable/what-is-dragged-over-from-result';
 
-export const makeSelector = (): Selector => {
-  const idSelector = (state: State, ownProps: OwnProps) =>
-    ownProps.droppableId;
-  const isDropDisabledSelector = (state: State, ownProps: OwnProps) =>
-    ownProps.isDropDisabled || false;
+const isMatchingType = (type: TypeId, critical: Critical): boolean =>
+  type === critical.droppable.type;
 
-  const getIsDraggingOver = memoizeOne(
-    (id: DroppableId, destination: ?DraggableLocation): boolean => {
-      if (!destination) {
-        return false;
-      }
-      return destination.droppableId === id;
+const getDraggable = (
+  critical: Critical,
+  dimensions: DimensionMap,
+): DraggableDimension => dimensions.draggables[critical.draggable.id];
+
+// Returning a function to ensure each
+// Droppable gets its own selector
+export const makeMapStateToProps = (): Selector => {
+  const idleWithAnimation: MapProps = {
+    placeholder: null,
+    shouldAnimatePlaceholder: true,
+    snapshot: {
+      isDraggingOver: false,
+      draggingOverWith: null,
+      draggingFromThisWith: null,
+      isUsingPlaceholder: false,
     },
-  );
+    useClone: null,
+  };
 
-  const getPlaceholder = memoizeOne(
-    (id: DroppableId,
-      destination: ?DraggableLocation,
-      draggable: ?DraggableDimension
-    ): ?Placeholder => {
-      // not dragging anything
-      if (!draggable) {
-        return null;
-      }
+  const idleWithoutAnimation = {
+    ...idleWithAnimation,
+    shouldAnimatePlaceholder: false,
+  };
 
-      // not dragging over any droppable
-      if (!destination) {
-        return null;
-      }
-
-      // no placeholder needed when dragging over the home droppable
-      if (id === draggable.descriptor.droppableId) {
-        return null;
-      }
-
-      // not over this droppable
-      if (id !== destination.droppableId) {
-        return null;
-      }
-
-      return draggable.placeholder;
-    }
+  const getDraggableRubric = memoizeOne(
+    (descriptor: DraggableDescriptor): DraggableRubric => ({
+      draggableId: descriptor.id,
+      type: descriptor.type,
+      source: {
+        index: descriptor.index,
+        droppableId: descriptor.droppableId,
+      },
+    }),
   );
 
   const getMapProps = memoizeOne(
-    (isDraggingOver: boolean,
-      draggingOverWith: ?DraggableId,
-      placeholder: ?Placeholder,
-    ): MapProps => ({
-      isDraggingOver,
-      draggingOverWith,
-      placeholder,
-    })
-  );
-
-  return createSelector(
-    [phaseSelector,
-      dragSelector,
-      draggingDraggableSelector,
-      pendingDropSelector,
-      idSelector,
-      isDropDisabledSelector,
-    ],
-    (phase: Phase,
-      drag: ?DragState,
-      draggable: ?DraggableDimension,
-      pending: ?PendingDrop,
+    (
       id: DroppableId,
-      isDropDisabled: boolean,
+      isEnabled: boolean,
+      isDraggingOverForConsumer: boolean,
+      isDraggingOverForImpact: boolean,
+      dragging: DraggableDimension,
+      // snapshot: StateSnapshot,
+      renderClone: ?DraggableChildrenFn,
     ): MapProps => {
-      if (isDropDisabled) {
-        return getMapProps(false, null, null);
+      const draggableId: DraggableId = dragging.descriptor.id;
+      const isHome: boolean = dragging.descriptor.droppableId === id;
+
+      if (isHome) {
+        const useClone: ?UseClone = renderClone
+          ? {
+              render: renderClone,
+              dragging: getDraggableRubric(dragging.descriptor),
+            }
+          : null;
+
+        const snapshot: StateSnapshot = {
+          isDraggingOver: isDraggingOverForConsumer,
+          draggingOverWith: isDraggingOverForConsumer ? draggableId : null,
+          draggingFromThisWith: draggableId,
+          isUsingPlaceholder: true,
+        };
+
+        return {
+          placeholder: dragging.placeholder,
+          shouldAnimatePlaceholder: false,
+          snapshot,
+          useClone,
+        };
       }
 
-      if (phase === 'DRAGGING') {
-        if (!drag) {
-          console.error('cannot determine dragging over as there is not drag');
-          return getMapProps(false, null, null);
-        }
-
-        const isDraggingOver = getIsDraggingOver(id, drag.impact.destination);
-        const draggingOverWith: ?DraggableId = isDraggingOver ?
-          drag.initial.descriptor.id : null;
-
-        const placeholder: ?Placeholder = getPlaceholder(
-          id,
-          drag.impact.destination,
-          draggable,
-        );
-
-        return getMapProps(isDraggingOver, draggingOverWith, placeholder);
+      if (!isEnabled) {
+        return idleWithoutAnimation;
       }
 
-      if (phase === 'DROP_ANIMATING') {
-        if (!pending) {
-          console.error('cannot determine dragging over as there is no pending result');
-          return getMapProps(false, null, null);
-        }
-
-        const isDraggingOver = getIsDraggingOver(id, pending.impact.destination);
-        const draggingOverWith: ?DraggableId = isDraggingOver ?
-          pending.result.draggableId : null;
-
-        const placeholder: ?Placeholder = getPlaceholder(
-          id,
-          pending.result.destination,
-          draggable,
-        );
-        return getMapProps(isDraggingOver, draggingOverWith, placeholder);
+      // not over foreign list - return idle
+      if (!isDraggingOverForImpact) {
+        return idleWithAnimation;
       }
 
-      return getMapProps(false, null, null);
+      const snapshot: StateSnapshot = {
+        isDraggingOver: isDraggingOverForConsumer,
+        draggingOverWith: draggableId,
+        draggingFromThisWith: null,
+        isUsingPlaceholder: true,
+      };
+
+      return {
+        placeholder: dragging.placeholder,
+        // Animating placeholder in foreign list
+        shouldAnimatePlaceholder: true,
+        snapshot,
+        useClone: null,
+      };
     },
   );
+
+  const selector = (state: State, ownProps: OwnProps): MapProps => {
+    // not checking if item is disabled as we need the home list to display a placeholder
+
+    const id: DroppableId = ownProps.droppableId;
+    const type: TypeId = ownProps.type;
+    const isEnabled: boolean = !ownProps.isDropDisabled;
+    const renderClone: ?DraggableChildrenFn = ownProps.renderClone;
+
+    if (state.isDragging) {
+      const critical: Critical = state.critical;
+      if (!isMatchingType(type, critical)) {
+        return idleWithoutAnimation;
+      }
+
+      const dragging: DraggableDimension = getDraggable(
+        critical,
+        state.dimensions,
+      );
+      const isDraggingOver: boolean = whatIsDraggedOver(state.impact) === id;
+
+      return getMapProps(
+        id,
+        isEnabled,
+        isDraggingOver,
+        isDraggingOver,
+        dragging,
+        renderClone,
+      );
+    }
+
+    if (state.phase === 'DROP_ANIMATING') {
+      const completed: CompletedDrag = state.completed;
+      if (!isMatchingType(type, completed.critical)) {
+        return idleWithoutAnimation;
+      }
+
+      const dragging: DraggableDimension = getDraggable(
+        completed.critical,
+        state.dimensions,
+      );
+
+      // Snapshot based on result and not impact
+      // The result might be null (cancel) but the impact is populated
+      // to move everything back
+      return getMapProps(
+        id,
+        isEnabled,
+        whatIsDraggedOverFromResult(completed.result) === id,
+        whatIsDraggedOver(completed.impact) === id,
+        dragging,
+        renderClone,
+      );
+    }
+
+    if (state.phase === 'IDLE' && state.completed && !state.shouldFlush) {
+      const completed: CompletedDrag = state.completed;
+      if (!isMatchingType(type, completed.critical)) {
+        return idleWithoutAnimation;
+      }
+
+      // Looking at impact as this controls the placeholder
+      const wasOver: boolean = whatIsDraggedOver(completed.impact) === id;
+      const wasCombining: boolean = Boolean(
+        completed.impact.at && completed.impact.at.type === 'COMBINE',
+      );
+      const isHome: boolean = completed.critical.droppable.id === id;
+
+      if (wasOver) {
+        // if reordering we need to cut an animation immediately
+        // if merging: animate placeholder closed after drop
+        return wasCombining ? idleWithAnimation : idleWithoutAnimation;
+      }
+
+      // we need to animate the home placeholder closed if it is not
+      // being dropped into
+      if (isHome) {
+        return idleWithAnimation;
+      }
+
+      return idleWithoutAnimation;
+    }
+
+    // default: including when flushed
+    return idleWithoutAnimation;
+  };
+
+  return selector;
 };
 
-const makeMapStateToProps = () => {
-  const selector = makeSelector();
-  return (state: State, props: OwnProps) => selector(state, props);
+const mapDispatchToProps: DispatchProps = {
+  updateViewportMaxScroll: updateViewportMaxScrollAction,
 };
+
+function getBody(): HTMLElement {
+  invariant(document.body, 'document.body is not ready');
+  return document.body;
+}
+
+const defaultProps = ({
+  mode: 'standard',
+  type: 'DEFAULT',
+  direction: 'vertical',
+  isDropDisabled: false,
+  isCombineEnabled: false,
+  ignoreContainerClipping: false,
+  renderClone: null,
+  getContainerForClone: getBody,
+}: DefaultProps);
+
+// Abstract class allows to specify props and defaults to component.
+// All other ways give any or do not let add default props.
+// eslint-disable-next-line
+/*::
+class DroppableType extends Component<OwnProps> {
+  static defaultProps = defaultProps;
+}
+*/
 
 // Leaning heavily on the default shallow equality checking
 // that `connect` provides.
 // It avoids needing to do it own within `Droppable`
-const connectedDroppable: OwnProps => Node = (connect(
-  // returning a function to ensure each
-  // Droppable gets its own selector
-  (makeMapStateToProps: any),
+const ConnectedDroppable: typeof DroppableType = connect(
+  // returning a function so each component can do its own memoization
+  makeMapStateToProps,
+  // no dispatch props for droppable
+  mapDispatchToProps,
+  // mergeProps - using default
   null,
-  null,
-  { storeKey },
-): any)(Droppable);
+  // $FlowFixMe: current react-redux type does not know about context property
+  {
+    // Ensuring our context does not clash with consumers
+    context: StoreContext,
+    // pure: true is default value, but being really clear
+    pure: true,
+    // When pure, compares the result of mapStateToProps to its previous value.
+    // Default value: shallowEqual
+    // Switching to a strictEqual as we return a memoized object on changes
+    areStatePropsEqual: isStrictEqual,
+  },
+)(Droppable);
 
-connectedDroppable.defaultProps = ({
-  type: 'DEFAULT',
-  isDropDisabled: false,
-  direction: 'vertical',
-  ignoreContainerClipping: false,
-}: DefaultProps);
+ConnectedDroppable.defaultProps = defaultProps;
 
-export default connectedDroppable;
+export default ConnectedDroppable;

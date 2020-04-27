@@ -1,18 +1,12 @@
 // @flow
+import { type Position, type Spacing } from 'css-box-model';
 import isWithin from '../is-within';
-import type {
-  Spacing,
-  Position,
-} from '../../types';
 
-export default (frame: Spacing) => {
+export default function isPositionInFrame(frame: Spacing) {
   const isWithinVertical = isWithin(frame.top, frame.bottom);
   const isWithinHorizontal = isWithin(frame.left, frame.right);
 
-  return (point: Position) =>
-    isWithinVertical(point.y) &&
-    isWithinVertical(point.y) &&
-    isWithinHorizontal(point.x) &&
-    isWithinHorizontal(point.x);
-};
-
+  return function run(point: Position) {
+    return isWithinVertical(point.y) && isWithinHorizontal(point.x);
+  };
+}

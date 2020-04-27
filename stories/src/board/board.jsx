@@ -1,21 +1,17 @@
 // @flow
 import React, { Component } from 'react';
-import styled, { injectGlobal } from 'styled-components';
-import { action } from '@storybook/addon-actions';
-import Column from './column';
-import { colors } from '../constants';
-import reorder, { reorderQuoteMap } from '../reorder';
-import { DragDropContext, Droppable } from '../../../src/';
+import styled from '@emotion/styled';
+import { Global, css } from '@emotion/core';
+import { colors } from '@atlaskit/theme';
 import type {
   DropResult,
-  DragStart,
   DraggableLocation,
   DroppableProvided,
-} from '../../../src/';
-import type { QuoteMap } from '../types';
-
-const publishOnDragStart = action('onDragStart');
-const publishOnDragEnd = action('onDragEnd');
+} from '../../../src';
+import type { QuoteMap, Quote } from '../types';
+import Column from './column';
+import reorder, { reorderQuoteMap } from '../reorder';
+import { DragDropContext, Droppable } from '../../../src';
 
 const ParentContainer = styled.div`
   height: ${({ height }) => height};
@@ -24,8 +20,8 @@ const ParentContainer = styled.div`
 `;
 
 const Container = styled.div`
+  background-color: ${colors.B100};
   min-height: 100vh;
-
   /* like display:flex but will allow bleeding over the window width */
   min-width: 100vw;
   display: inline-flex;
@@ -33,45 +29,49 @@ const Container = styled.div`
 
 type Props = {|
   initial: QuoteMap,
+  withScrollableColumns?: boolean,
+  isCombineEnabled?: boolean,
   containerHeight?: string,
-|}
+  useClone?: boolean,
+|};
 
 type State = {|
   columns: QuoteMap,
   ordered: string[],
-  autoFocusQuoteId: ?string,
-|}
+|};
 
 export default class Board extends Component<Props, State> {
   /* eslint-disable react/sort-comp */
+  static defaultProps = {
+    isCombineEnabled: false,
+  };
 
   state: State = {
     columns: this.props.initial,
     ordered: Object.keys(this.props.initial),
-    autoFocusQuoteId: null,
-  }
+  };
 
-  boardRef: ?HTMLElement
-
-  componentDidMount() {
-    // eslint-disable-next-line no-unused-expressions
-    injectGlobal`
-      body {
-        background: ${colors.blue.deep};
-      }
-    `;
-  }
-
-  onDragStart = (initial: DragStart) => {
-    publishOnDragStart(initial);
-
-    this.setState({
-      autoFocusQuoteId: null,
-    });
-  }
+  boardRef: ?HTMLElement;
 
   onDragEnd = (result: DropResult) => {
-    publishOnDragEnd(result);
+    if (result.combine) {
+      if (result.type === 'COLUMN') {
+        const shallow: string[] = [...this.state.ordered];
+        shallow.splice(result.source.index, 1);
+        this.setState({ ordered: shallow });
+        return;
+      }
+
+      const column: Quote[] = this.state.columns[result.source.droppableId];
+      const withQuoteRemoved: Quote[] = [...column];
+      withQuoteRemoved.splice(result.source.index, 1);
+      const columns: QuoteMap = {
+        ...this.state.columns,
+        [result.source.droppableId]: withQuoteRemoved,
+      };
+      this.setState({ columns });
+      return;
+    }
 
     // dropped nowhere
     if (!result.destination) {
@@ -82,8 +82,10 @@ export default class Board extends Component<Props, State> {
     const destination: DraggableLocation = result.destination;
 
     // did not move anywhere - can bail early
-    if (source.droppableId === destination.droppableId &&
-      source.index === destination.index) {
+    if (
+      source.droppableId === destination.droppableId &&
+      source.index === destination.index
+    ) {
       return;
     }
 
@@ -92,7 +94,7 @@ export default class Board extends Component<Props, State> {
       const ordered: string[] = reorder(
         this.state.ordered,
         source.index,
-        destination.index
+        destination.index,
       );
 
       this.setState({
@@ -110,14 +112,18 @@ export default class Board extends Component<Props, State> {
 
     this.setState({
       columns: data.quoteMap,
-      autoFocusQuoteId: data.autoFocusQuoteId,
     });
-  }
+  };
 
   render() {
     const columns: QuoteMap = this.state.columns;
     const ordered: string[] = this.state.ordered;
-    const { containerHeight } = this.props;
+    const {
+      containerHeight,
+      useClone,
+      isCombineEnabled,
+      withScrollableColumns,
+    } = this.props;
 
     const board = (
       <Droppable
@@ -125,34 +131,44 @@ export default class Board extends Component<Props, State> {
         type="COLUMN"
         direction="horizontal"
         ignoreContainerClipping={Boolean(containerHeight)}
+        isCombineEnabled={isCombineEnabled}
       >
         {(provided: DroppableProvided) => (
-          <Container innerRef={provided.innerRef} {...provided.droppableProps}>
+          <Container ref={provided.innerRef} {...provided.droppableProps}>
             {ordered.map((key: string, index: number) => (
               <Column
                 key={key}
                 index={index}
                 title={key}
                 quotes={columns[key]}
-                autoFocusQuoteId={this.state.autoFocusQuoteId}
+                isScrollable={withScrollableColumns}
+                isCombineEnabled={isCombineEnabled}
+                useClone={useClone}
               />
             ))}
+            {provided.placeholder}
           </Container>
         )}
       </Droppable>
     );
 
     return (
-      <DragDropContext
-        onDragStart={this.onDragStart}
-        onDragEnd={this.onDragEnd}
-      >
-        {this.props.containerHeight ? (
-          <ParentContainer height={containerHeight}>{board}</ParentContainer>
-        ) : (
-          board
-        )}
-      </DragDropContext>
+      <React.Fragment>
+        <DragDropContext onDragEnd={this.onDragEnd}>
+          {containerHeight ? (
+            <ParentContainer height={containerHeight}>{board}</ParentContainer>
+          ) : (
+            board
+          )}
+        </DragDropContext>
+        <Global
+          styles={css`
+            body {
+              background: ${colors.B200};
+            }
+          `}
+        />
+      </React.Fragment>
     );
   }
 }

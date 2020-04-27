@@ -1,4 +1,5 @@
 // @flow
+import { type Position, type Rect } from 'css-box-model';
 import type {
   DroppableId,
   DraggableDimension,
@@ -6,80 +7,87 @@ import type {
   DraggableDimensionMap,
   DroppableDimensionMap,
   DragImpact,
-  Position,
   Viewport,
+  LiftEffect,
 } from '../../types';
 import getDroppableOver from '../get-droppable-over';
 import getDraggablesInsideDroppable from '../get-draggables-inside-droppable';
+import withDroppableScroll from '../with-scroll-change/with-droppable-scroll';
+import getReorderImpact from './get-reorder-impact';
+import getCombineImpact from './get-combine-impact';
 import noImpact from '../no-impact';
-import inHomeList from './in-home-list';
-import inForeignList from './in-foreign-list';
+import { offsetRectByPosition } from '../rect';
 
 type Args = {|
-  pageCenter: Position,
+  pageOffset: Position,
   draggable: DraggableDimension,
   // all dimensions in system
   draggables: DraggableDimensionMap,
   droppables: DroppableDimensionMap,
   previousImpact: DragImpact,
   viewport: Viewport,
-|}
+  afterCritical: LiftEffect,
+|};
 
 export default ({
-  pageCenter,
+  pageOffset,
   draggable,
   draggables,
   droppables,
   previousImpact,
   viewport,
+  afterCritical,
 }: Args): DragImpact => {
-  const previousDroppableOverId: ?DroppableId =
-    previousImpact.destination &&
-    previousImpact.destination.droppableId;
+  const pageBorderBox: Rect = offsetRectByPosition(
+    draggable.page.borderBox,
+    pageOffset,
+  );
 
   const destinationId: ?DroppableId = getDroppableOver({
-    target: pageCenter,
+    pageBorderBox,
     draggable,
-    draggables,
     droppables,
-    previousDroppableOverId,
   });
 
   // not dragging over anything
+
   if (!destinationId) {
+    // A big design decision was made here to collapse the home list
+    // when not over any list. This yielded the most consistently beautiful experience.
     return noImpact;
   }
 
   const destination: DroppableDimension = droppables[destinationId];
-
-  if (!destination.isEnabled) {
-    return noImpact;
-  }
-
-  const home: DroppableDimension = droppables[draggable.descriptor.droppableId];
-  const isWithinHomeDroppable: boolean = home.descriptor.id === destinationId;
   const insideDestination: DraggableDimension[] = getDraggablesInsideDroppable(
-    destination,
+    destination.descriptor.id,
     draggables,
   );
 
-  if (isWithinHomeDroppable) {
-    return inHomeList({
-      pageCenter,
-      draggable,
-      home,
-      insideHome: insideDestination,
-      previousImpact: previousImpact || noImpact,
-      viewport,
-    });
-  }
-
-  return inForeignList({
-    pageCenter,
-    draggable,
+  // Where the element actually is now.
+  // Need to take into account the change of scroll in the droppable
+  const pageBorderBoxWithDroppableScroll: Rect = withDroppableScroll(
     destination,
-    insideDestination,
-    previousImpact: previousImpact || noImpact,
-    viewport,
-  });
+    pageBorderBox,
+  );
+
+  // checking combine first so we combine before any reordering
+  return (
+    getCombineImpact({
+      pageBorderBoxWithDroppableScroll,
+      draggable,
+      previousImpact,
+      destination,
+      insideDestination,
+      afterCritical,
+    }) ||
+    getReorderImpact({
+      pageBorderBoxWithDroppableScroll,
+      draggable,
+      destination,
+      insideDestination,
+      last: previousImpact.displaced,
+      viewport,
+      afterCritical,
+    })
+  );
 };

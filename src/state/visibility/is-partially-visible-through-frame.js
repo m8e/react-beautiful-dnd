@@ -1,8 +1,6 @@
 // @flow
+import { type Spacing } from 'css-box-model';
 import isWithin from '../is-within';
-import type {
-  Spacing,
-} from '../../types';
 
 export default (frame: Spacing) => {
   const isWithinVertical = isWithin(frame.top, frame.bottom);
@@ -39,8 +37,10 @@ export default (frame: Spacing) => {
       return true;
     }
 
-    const isBiggerVertically: boolean = subject.top < frame.top && subject.bottom > frame.bottom;
-    const isBiggerHorizontally: boolean = subject.left < frame.left && subject.right > frame.right;
+    const isBiggerVertically: boolean =
+      subject.top < frame.top && subject.bottom > frame.bottom;
+    const isBiggerHorizontally: boolean =
+      subject.left < frame.left && subject.right > frame.right;
 
     // is bigger than frame on both axis
     const isTargetBiggerThanFrame: boolean =

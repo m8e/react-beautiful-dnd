@@ -1,24 +1,16 @@
 // @flow
-import React, { Component } from 'react';
-import styled from 'styled-components';
-import { action } from '@storybook/addon-actions';
-import { DragDropContext } from '../../../src/';
-import QuoteList from '../primatives/quote-list';
-import { colors, grid } from '../constants';
-import reorder from '../reorder';
+import React, { useState } from 'react';
+import styled from '@emotion/styled';
 import type { Quote } from '../types';
-import type { DropResult, DragStart } from '../../../src/types';
-
-const publishOnDragStart = action('onDragStart');
-const publishOnDragEnd = action('onDragEnd');
+import type { DropResult } from '../../../src/types';
+import { DragDropContext } from '../../../src';
+import QuoteList from '../primatives/quote-list';
+import reorder from '../reorder';
+import { grid } from '../constants';
 
 const Root = styled.div`
-  background-color: ${colors.blue.deep};
-  box-sizing: border-box;
-  padding: ${grid * 2}px;
-  min-height: 100vh;
-
   /* flexbox */
+  padding-top: ${grid * 2}px;
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -26,22 +18,14 @@ const Root = styled.div`
 
 type Props = {|
   initial: Quote[],
+  isCombineEnabled?: boolean,
   listStyle?: Object,
-|}
+|};
 
-type State = {|
-  quotes: Quote[],
-|}
+export default function QuoteApp(props: Props) {
+  const [quotes, setQuotes] = useState(() => props.initial);
 
-export default class QuoteApp extends Component<Props, State> {
-  /* eslint-disable react/sort-comp */
-
-  state: State = {
-    quotes: this.props.initial,
-  };
-
-  onDragStart = (initial: DragStart) => {
-    publishOnDragStart(initial);
+  function onDragStart() {
     // Add a little vibration if the browser supports it.
     // Add's a nice little physical feedback
     if (window.navigator.vibrate) {
@@ -49,8 +33,15 @@ export default class QuoteApp extends Component<Props, State> {
     }
   }
 
-  onDragEnd = (result: DropResult) => {
-    publishOnDragEnd(result);
+  function onDragEnd(result: DropResult) {
+    // combining item
+    if (result.combine) {
+      // super simple: just removing the dragging item
+      const newQuotes: Quote[] = [...quotes];
+      newQuotes.splice(result.source.index, 1);
+      setQuotes(newQuotes);
+      return;
+    }
 
     // dropped outside the list
     if (!result.destination) {
@@ -61,33 +52,25 @@ export default class QuoteApp extends Component<Props, State> {
       return;
     }
 
-    const quotes = reorder(
-      this.state.quotes,
-      result.source.index,
-      result.destination.index
-    );
-
-    this.setState({
+    const newQuotes = reorder(
       quotes,
-    });
-  }
-
-  render() {
-    const { quotes } = this.state;
-
-    return (
-      <DragDropContext
-        onDragStart={this.onDragStart}
-        onDragEnd={this.onDragEnd}
-      >
-        <Root>
-          <QuoteList
-            listId="list"
-            style={this.props.listStyle}
-            quotes={quotes}
-          />
-        </Root>
-      </DragDropContext>
+      result.source.index,
+      result.destination.index,
     );
+
+    setQuotes(newQuotes);
   }
+
+  return (
+    <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
+      <Root>
+        <QuoteList
+          listId="list"
+          style={props.listStyle}
+          quotes={quotes}
+          isCombineEnabled={props.isCombineEnabled}
+        />
+      </Root>
+    </DragDropContext>
+  );
 }

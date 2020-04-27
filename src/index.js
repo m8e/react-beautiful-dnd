@@ -2,13 +2,13 @@
 
 // Components
 
-export { default as DragDropContext } from './view/drag-drop-context/';
-export { default as Droppable } from './view/droppable/';
-export { default as Draggable } from './view/draggable/';
+export { default as DragDropContext } from './view/drag-drop-context';
+export { default as Droppable } from './view/droppable';
+export { default as Draggable } from './view/draggable';
 
 // Utils
 
-export { resetServerContext } from './view/drag-drop-context/';
+export { resetServerContext } from './view/drag-drop-context';
 
 // Public flow types
 
@@ -17,37 +17,43 @@ export type {
   TypeId,
   DraggableId,
   DroppableId,
-
-  // Hooks
+  DraggableRubric,
+  MovementMode,
+  BeforeCapture,
   DragStart,
   DragUpdate,
   DropResult,
-  HookProvided,
+  Direction,
+  ResponderProvided,
   Announce,
   DraggableLocation,
-  OnDragStartHook,
-  OnDragUpdateHook,
-  OnDragEndHook,
+  OnBeforeCaptureResponder,
+  OnBeforeDragStartResponder,
+  OnDragStartResponder,
+  OnDragUpdateResponder,
+  OnDragEndResponder,
+  SensorAPI,
+  Sensor,
+  TryGetLock,
+  TryGetLockOptions,
 } from './types';
 
-// Droppable
+// Droppable types
 export type {
   Provided as DroppableProvided,
   StateSnapshot as DroppableStateSnapshot,
   DroppableProps,
 } from './view/droppable/droppable-types';
 
-// Draggable
+// Draggable types
 export type {
   Provided as DraggableProvided,
   StateSnapshot as DraggableStateSnapshot,
+  DragHandleProps,
+  DropAnimation,
   DraggableProps,
   DraggableStyle,
   DraggingStyle,
   NotDraggingStyle,
+  ChildrenFn as DraggableChildrenFn,
 } from './view/draggable/draggable-types';
-
-// DragHandle
-export type {
-  DragHandleProps,
-} from './view/drag-handle/drag-handle-types';

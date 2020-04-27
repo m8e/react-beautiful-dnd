@@ -1,20 +1,17 @@
 // @flow
 import React, { Component } from 'react';
-import styled from 'styled-components';
-import { action } from '@storybook/addon-actions';
-import { DragDropContext } from '../../../src/';
+import styled from '@emotion/styled';
+import { colors } from '@atlaskit/theme';
+import { DragDropContext } from '../../../src';
 import QuoteList from '../primatives/quote-list';
-import { colors, grid } from '../constants';
+import { grid } from '../constants';
 import { reorderQuoteMap } from '../reorder';
 import type { ReorderQuoteMapResult } from '../reorder';
 import type { QuoteMap } from '../types';
-import type { DropResult, DragStart, DraggableLocation } from '../../../src/types';
-
-const publishOnDragStart = action('onDragStart');
-const publishOnDragEnd = action('onDragEnd');
+import type { DropResult, DraggableLocation } from '../../../src/types';
 
 const Root = styled.div`
-  background-color: ${colors.blue.deep};
+  background-color: ${colors.B200};
   box-sizing: border-box;
   padding: ${grid * 2}px;
   min-height: 100vh;
@@ -56,28 +53,18 @@ const PushDown = styled.div`
 
 type Props = {|
   initial: QuoteMap,
-|}
+|};
 
-type State = ReorderQuoteMapResult
+type State = ReorderQuoteMapResult;
 
 export default class QuoteApp extends Component<Props, State> {
   /* eslint-disable react/sort-comp */
 
   state: State = {
     quoteMap: this.props.initial,
-    autoFocusQuoteId: null,
   };
 
-  onDragStart = (initial: DragStart) => {
-    publishOnDragStart(initial);
-    // this.setState({
-    //   disabledDroppable: this.getDisabledDroppable(initial.source.droppableId),
-    // });
-  }
-
   onDragEnd = (result: DropResult) => {
-    publishOnDragEnd(result);
-
     // dropped nowhere
     if (!result.destination) {
       return;
@@ -86,12 +73,14 @@ export default class QuoteApp extends Component<Props, State> {
     const source: DraggableLocation = result.source;
     const destination: DraggableLocation = result.destination;
 
-    this.setState(reorderQuoteMap({
-      quoteMap: this.state.quoteMap,
-      source,
-      destination,
-    }));
-  }
+    this.setState(
+      reorderQuoteMap({
+        quoteMap: this.state.quoteMap,
+        source,
+        destination,
+      }),
+    );
+  };
 
   // TODO
   getDisabledDroppable = (sourceDroppable: ?string) => {
@@ -104,17 +93,14 @@ export default class QuoteApp extends Component<Props, State> {
     const disabledDroppableIndex = (sourceIndex + 1) % droppables.length;
 
     return droppables[disabledDroppableIndex];
-  }
+  };
 
   render() {
-    const { quoteMap, autoFocusQuoteId } = this.state;
+    const { quoteMap } = this.state;
     const disabledDroppable = 'TODO';
 
     return (
-      <DragDropContext
-        onDragStart={this.onDragStart}
-        onDragEnd={this.onDragEnd}
-      >
+      <DragDropContext onDragEnd={this.onDragEnd}>
         <Root>
           <HorizontalScrollContainer>
             <Column>
@@ -124,7 +110,6 @@ export default class QuoteApp extends Component<Props, State> {
                 listType="card"
                 isDropDisabled={disabledDroppable === 'alpha'}
                 quotes={quoteMap.alpha}
-                autoFocusQuoteId={autoFocusQuoteId}
               />
             </Column>
             <Column>
@@ -134,7 +119,6 @@ export default class QuoteApp extends Component<Props, State> {
                 listType="card"
                 isDropDisabled={disabledDroppable === 'beta'}
                 quotes={quoteMap.beta}
-                autoFocusQuoteId={autoFocusQuoteId}
               />
             </Column>
             <Column>
@@ -144,7 +128,6 @@ export default class QuoteApp extends Component<Props, State> {
                 listType="card"
                 isDropDisabled={disabledDroppable === 'gamma'}
                 quotes={quoteMap.gamma}
-                autoFocusQuoteId={autoFocusQuoteId}
               />
             </Column>
           </HorizontalScrollContainer>
@@ -156,7 +139,6 @@ export default class QuoteApp extends Component<Props, State> {
               listType="card"
               isDropDisabled={disabledDroppable === 'delta'}
               quotes={quoteMap.delta}
-              autoFocusQuoteId={autoFocusQuoteId}
             />
             <QuoteList
               title="epsilon"
@@ -165,7 +147,6 @@ export default class QuoteApp extends Component<Props, State> {
               internalScroll
               isDropDisabled={disabledDroppable === 'epsilon'}
               quotes={quoteMap.epsilon}
-              autoFocusQuoteId={autoFocusQuoteId}
             />
           </Column>
           <VerticalScrollContainer>
@@ -176,7 +157,6 @@ export default class QuoteApp extends Component<Props, State> {
                 listType="card"
                 isDropDisabled={disabledDroppable === 'zeta'}
                 quotes={quoteMap.zeta}
-                autoFocusQuoteId={autoFocusQuoteId}
               />
             </Column>
             <Column>
@@ -186,7 +166,6 @@ export default class QuoteApp extends Component<Props, State> {
                 listType="card"
                 isDropDisabled={disabledDroppable === 'eta'}
                 quotes={quoteMap.eta}
-                autoFocusQuoteId={autoFocusQuoteId}
               />
             </Column>
             <Column>
@@ -196,7 +175,6 @@ export default class QuoteApp extends Component<Props, State> {
                 listType="card"
                 isDropDisabled={disabledDroppable === 'theta'}
                 quotes={quoteMap.theta}
-                autoFocusQuoteId={autoFocusQuoteId}
               />
             </Column>
           </VerticalScrollContainer>
@@ -207,7 +185,6 @@ export default class QuoteApp extends Component<Props, State> {
               listType="card"
               isDropDisabled={disabledDroppable === 'iota'}
               quotes={quoteMap.iota}
-              autoFocusQuoteId={autoFocusQuoteId}
             />
           </Column>
           <Column>
@@ -218,7 +195,6 @@ export default class QuoteApp extends Component<Props, State> {
               internalScroll
               isDropDisabled={disabledDroppable === 'kappa'}
               quotes={quoteMap.kappa}
-              autoFocusQuoteId={autoFocusQuoteId}
             />
           </Column>
         </Root>

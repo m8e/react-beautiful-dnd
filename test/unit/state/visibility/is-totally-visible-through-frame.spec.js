@@ -1,10 +1,14 @@
 // @flow
+import { type Spacing } from 'css-box-model';
 import isTotallyVisibleThroughFrame from '../../../../src/state/visibility/is-totally-visible-through-frame';
-import { offsetByPosition, expandBySpacing } from '../../../../src/state/spacing';
-import type { Spacing } from '../../../../src/types';
+import { offsetByPosition } from '../../../../src/state/spacing';
+import { expandBySpacing } from '../../../util/spacing';
 
 const frame: Spacing = {
-  top: 0, left: 0, right: 100, bottom: 100,
+  top: 0,
+  left: 0,
+  right: 100,
+  bottom: 100,
 };
 
 describe('is totally visible through frame', () => {
@@ -70,7 +74,10 @@ describe('is totally visible through frame', () => {
     const bigSubject: Spacing = expandBySpacing(frame, frame);
 
     it('should return false if the subject has no overlap with the frame', () => {
-      const subject: Spacing = offsetByPosition(bigSubject, { x: 1000, y: 1000 });
+      const subject: Spacing = offsetByPosition(bigSubject, {
+        x: 1000,
+        y: 1000,
+      });
 
       expect(isTotallyVisibleThroughFrame(frame)(subject)).toBe(false);
     });

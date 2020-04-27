@@ -3,10 +3,7 @@ import type { Quote, QuoteMap } from './types';
 import type { DraggableLocation } from '../../src/types';
 
 // a little function to help us with reordering the result
-const reorder = (
-  list: any[],
-  startIndex: number,
-  endIndex: number): any[] => {
+const reorder = (list: any[], startIndex: number, endIndex: number): any[] => {
   const result = Array.from(list);
   const [removed] = result.splice(startIndex, 1);
   result.splice(endIndex, 0, removed);
@@ -20,12 +17,11 @@ type ReorderQuoteMapArgs = {|
   quoteMap: QuoteMap,
   source: DraggableLocation,
   destination: DraggableLocation,
-|}
+|};
 
 export type ReorderQuoteMapResult = {|
   quoteMap: QuoteMap,
-  autoFocusQuoteId: ?string,
-|}
+|};
 
 export const reorderQuoteMap = ({
   quoteMap,
@@ -49,8 +45,6 @@ export const reorderQuoteMap = ({
     };
     return {
       quoteMap: result,
-      // not auto focusing in own list
-      autoFocusQuoteId: null,
     };
   }
 
@@ -69,7 +63,49 @@ export const reorderQuoteMap = ({
 
   return {
     quoteMap: result,
-    autoFocusQuoteId: target.id,
   };
 };
 
+type List<T> = {|
+  id: string,
+  values: T[],
+|};
+
+type MoveBetweenArgs<T> = {|
+  list1: List<T>,
+  list2: List<T>,
+  source: DraggableLocation,
+  destination: DraggableLocation,
+|};
+
+type MoveBetweenResult<T> = {|
+  list1: List<T>,
+  list2: List<T>,
+|};
+
+export function moveBetween<T>({
+  list1,
+  list2,
+  source,
+  destination,
+}: MoveBetweenArgs<T>): MoveBetweenResult<T> {
+  const newFirst = Array.from(list1.values);
+  const newSecond = Array.from(list2.values);
+
+  const moveFrom = source.droppableId === list1.id ? newFirst : newSecond;
+  const moveTo = moveFrom === newFirst ? newSecond : newFirst;
+
+  const [moved] = moveFrom.splice(source.index, 1);
+  moveTo.splice(destination.index, 0, moved);
+
+  return {
+    list1: {
+      ...list1,
+      values: newFirst,
+    },
+    list2: {
+      ...list2,
+      values: newSecond,
+    },
+  };
+}
